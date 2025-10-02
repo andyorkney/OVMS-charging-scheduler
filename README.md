@@ -1,2 +1,3 @@
-# ThinkingP
-Ideas
+# OVMS charge timer script
+
+
