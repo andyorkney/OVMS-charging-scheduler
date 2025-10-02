@@ -1,0 +1,307 @@
+/**
+
+- OVMS Charging Module for EV - Universal
+- Save as: /store/scripts/lib/charging.js
+- Add to ovmsmain.js: charging = require("lib/charging");
+  */
+
+var config = {
+startHour: 23,
+startMinute: 30,
+stopHour: 5,
+stopMinute: 30,
+targetSOC: 80,
+skipSOC: 75,
+minSOC: 20,
+readyByHour: null,
+readyByMinute: null,
+chargeRateKWh: 1.8,
+batteryCapacityKWh: null,
+batterySOH: null
+};
+
+function getBatteryParams() {
+var capacity = config.batteryCapacityKWh;
+var soh = config.batterySOH;
+
+if (OvmsMetrics.HasValue("v.b.cac")) {
+    var cac = OvmsMetrics.AsFloat("v.b.cac");
+    var voltage = 360;
+    
+    if (OvmsMetrics.HasValue("v.b.voltage")) {
+        voltage = OvmsMetrics.AsFloat("v.b.voltage");
+    } else if (OvmsMetrics.HasValue("xnl.v.b.voltage.max")) {
+        voltage = OvmsMetrics.AsFloat("xnl.v.b.voltage.max");
+    }
+    
+    capacity = (cac * voltage) / 1000;
+}
+
+if (OvmsMetrics.HasValue("v.b.soh")) {
+    soh = OvmsMetrics.AsFloat("v.b.soh");
+}
+
+if (!capacity) {
+    capacity = 40;
+}
+if (!soh) {
+    soh = 100;
+}
+
+return {
+    capacity: capacity,
+    soh: soh,
+    usable: capacity * (soh / 100)
+};
+
+}
+
+exports.status = function() {
+print("=== Charging Status ===\n");
+print("Time: " + new Date().toISOString() + "\n\n");
+
+var battery = getBatteryParams();
+print("Battery:\n");
+print("  Capacity: " + battery.capacity.toFixed(1) + " kWh\n");
+print("  SOH: " + battery.soh.toFixed(0) + "%\n");
+print("  Usable: " + battery.usable.toFixed(1) + " kWh\n");
+print("  Charge rate: " + config.chargeRateKWh + " kW\n\n");
+
+print("Schedule:\n");
+print("  Cheap rate window: " + pad(config.startHour) + ":" + pad(config.startMinute) + " to " + pad(config.stopHour) + ":" + pad(config.stopMinute) + "\n");
+if (config.readyByHour !== null) {
+    print("  Ready by: " + pad(config.readyByHour) + ":" + pad(config.readyByMinute) + "\n");
+    var calcStart = calculateOptimalStart();
+    if (calcStart) {
+        print("  Calculated start: " + pad(calcStart.hour) + ":" + pad(calcStart.minute) + "\n");
+    }
+} else {
+    print("  Start: " + pad(config.startHour) + ":" + pad(config.startMinute) + "\n");
+    print("  Stop: " + pad(config.stopHour) + ":" + pad(config.stopMinute) + "\n");
+}
+print("  Target SOC: " + config.targetSOC + "%\n");
+print("  Skip if above: " + config.skipSOC + "%\n\n");
+
+print("Vehicle:\n");
+if (OvmsMetrics.HasValue("v.b.soc")) {
+    print("  SOC: " + OvmsMetrics.AsFloat("v.b.soc") + "%\n");
+}
+if (OvmsMetrics.HasValue("v.c.charging")) {
+    print("  Charging: " + OvmsMetrics.Value("v.c.charging") + "\n");
+}
+if (OvmsMetrics.HasValue("v.c.state")) {
+    print("  State: " + OvmsMetrics.Value("v.c.state") + "\n");
+}
+if (OvmsMetrics.HasValue("v.c.pilot")) {
+    print("  Plugged in: " + OvmsMetrics.Value("v.c.pilot") + "\n");
+}
+if (OvmsMetrics.HasValue("v.b.temp")) {
+    print("  Battery temp: " + OvmsMetrics.AsFloat("v.b.temp") + " C\n");
+}
+
+print("\nReady to charge: " + canCharge() + "\n");
+
+
+};
+
+exports.start = function() {
+print("=== Starting Charge ===\n");
+
+
+if (!canCharge()) {
+    print("Cannot start charging\n");
+    return false;
+}
+
+var soc = OvmsMetrics.HasValue("v.b.soc") ? OvmsMetrics.AsFloat("v.b.soc") : 0;
+print("Current SOC: " + soc + "%\n");
+
+var result = OvmsCommand.Exec("charge start");
+print("Result: " + result + "\n");
+
+scheduleStop();
+return true;
+
+
+};
+
+exports.stop = function() {
+print("=== Stopping Charge ===\n");
+
+if (!OvmsMetrics.HasValue("v.c.charging") || !OvmsMetrics.Value("v.c.charging")) {
+    print("Not charging\n");
+    return true;
+}
+
+var soc = OvmsMetrics.HasValue("v.b.soc") ? OvmsMetrics.AsFloat("v.b.soc") : 0;
+print("Final SOC: " + soc + "%\n");
+
+var result = OvmsCommand.Exec("charge stop");
+print("Result: " + result + "\n");
+return true;
+
+
+};
+
+exports.setStart = function(hour, minute) {
+config.startHour = hour;
+config.startMinute = minute;
+print("Start: " + pad(hour) + ":" + pad(minute) + "\n");
+};
+
+exports.setStop = function(hour, minute) {
+config.stopHour = hour;
+config.stopMinute = minute;
+print("Stop: " + pad(hour) + ":" + pad(minute) + "\n");
+};
+
+exports.setLimits = function(target, skip) {
+config.targetSOC = target;
+config.skipSOC = skip;
+print("Target: " + target + "%, Skip: " + skip + "%\n");
+};
+
+exports.setChargeRate = function(rateKW) {
+config.chargeRateKWh = rateKW;
+print("Charge rate set to: " + rateKW + " kW\n");
+print("Common rates: 1.8kW (granny), 3.3kW (Type 2 slow), 7kW (Type 2 fast)\n");
+};
+
+exports.setReadyBy = function(hour, minute) {
+config.readyByHour = hour;
+config.readyByMinute = minute;
+print("Ready by: " + pad(hour) + ":" + pad(minute) + "\n");
+
+
+var calcStart = calculateOptimalStart();
+if (calcStart) {
+    print("Will start at: " + pad(calcStart.hour) + ":" + pad(calcStart.minute) + "\n");
+    print("Charging time needed: " + calcStart.hoursNeeded.toFixed(1) + " hours\n");
+    print("NOTE: Update clock event to clock." + pad(calcStart.hour) + pad(calcStart.minute) + "\n");
+}
+
+};
+
+exports.clearReadyBy = function() {
+config.readyByHour = null;
+config.readyByMinute = null;
+print("Ready by cleared - using fixed schedule\n");
+print("Start: " + pad(config.startHour) + ":" + pad(config.startMinute) + "\n");
+print("Stop: " + pad(config.stopHour) + ":" + pad(config.stopMinute) + "\n");
+};
+
+function canCharge() {
+if (!OvmsMetrics.HasValue("v.c.pilot") || !OvmsMetrics.Value("v.c.pilot")) {
+return false;
+}
+if (OvmsMetrics.HasValue("v.c.charging") && OvmsMetrics.Value("v.c.charging")) {
+return false;
+}
+var soc = OvmsMetrics.HasValue("v.b.soc") ? OvmsMetrics.AsFloat("v.b.soc") : 0;
+if (soc < config.minSOC || soc >= config.skipSOC) {
+return false;
+}
+return true;
+}
+
+function scheduleStop() {
+var now = new Date();
+var stopTime = new Date();
+
+
+if (config.readyByHour !== null) {
+    stopTime.setHours(config.readyByHour, config.readyByMinute, 0, 0);
+} else {
+    stopTime.setHours(config.stopHour, config.stopMinute, 0, 0);
+}
+
+if (stopTime <= now) {
+    stopTime.setDate(stopTime.getDate() + 1);
+}
+var delayMs = stopTime.getTime() - now.getTime();
+OvmsEvents.Raise("usr.charge.stop", delayMs);
+
+var delayMin = delayMs / 1000 / 60;
+print("Will stop in " + delayMin.toFixed(0) + " minutes\n");
+
+
+}
+
+function calculateOptimalStart() {
+if (config.readyByHour === null) {
+return null;
+}
+
+
+var now = new Date();
+var currentSOC = OvmsMetrics.HasValue("v.b.soc") ? OvmsMetrics.AsFloat("v.b.soc") : 0;
+var socNeeded = config.targetSOC - currentSOC;
+
+if (socNeeded <= 0) {
+    print("Already at target SOC\n");
+    return null;
+}
+
+var battery = getBatteryParams();
+var kWhNeeded = (socNeeded / 100) * battery.usable;
+var hoursNeeded = kWhNeeded / config.chargeRateKWh;
+var minutesNeeded = Math.ceil(hoursNeeded * 60);
+
+print("Charge calculation:\n");
+print("  Battery: " + battery.capacity.toFixed(1) + " kWh, SOH: " + battery.soh.toFixed(0) + "%\n");
+print("  Usable: " + battery.usable.toFixed(1) + " kWh\n");
+print("  Need " + socNeeded + "% (" + kWhNeeded.toFixed(1) + " kWh)\n");
+print("  At " + config.chargeRateKWh + " kW = " + hoursNeeded.toFixed(1) + " hours\n");
+
+var readyBy = new Date();
+readyBy.setHours(config.readyByHour, config.readyByMinute, 0, 0);
+if (readyBy <= now) {
+    readyBy.setDate(readyBy.getDate() + 1);
+}
+
+var startTime = new Date(readyBy.getTime() - (minutesNeeded * 60 * 1000));
+
+var cheapStart = new Date();
+cheapStart.setHours(config.startHour, config.startMinute, 0, 0);
+if (cheapStart <= now) {
+    cheapStart.setDate(cheapStart.getDate() + 1);
+}
+
+var cheapEnd = new Date();
+cheapEnd.setHours(config.stopHour, config.stopMinute, 0, 0);
+if (cheapEnd <= cheapStart) {
+    cheapEnd.setDate(cheapEnd.getDate() + 1);
+}
+
+var cheapWindowHours = (cheapEnd - cheapStart) / 3600000;
+
+if (startTime < cheapStart) {
+    print("Warning: Need " + hoursNeeded.toFixed(1) + " hours but only " + cheapWindowHours.toFixed(1) + " hours in cheap window\n");
+    print("Will start at beginning of cheap window (" + pad(config.startHour) + ":" + pad(config.startMinute) + ")\n");
+    var maxCharge = (cheapWindowHours * config.chargeRateKWh / battery.usable) * 100;
+    print("Can achieve approx " + (currentSOC + maxCharge).toFixed(0) + "% SOC\n");
+    startTime = cheapStart;
+}
+
+if (startTime > cheapEnd) {
+    print("Warning: Ready time is before cheap window starts\n");
+    return null;
+}
+
+return {
+    hour: startTime.getHours(),
+    minute: startTime.getMinutes(),
+    hoursNeeded: hoursNeeded
+};
+
+}
+
+function pad(num) {
+return num < 10 ? "0" + num : num.toString();
+}
+
+PubSub.subscribe("usr.charge.stop", function(msg, data) {
+exports.stop();
+});
+
+print("Charging module loaded\n");
