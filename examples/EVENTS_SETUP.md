@@ -2,6 +2,64 @@
 
 This guide explains how to set up clock event files on your OVMS module to enable automatic charging.
 
+## ⭐ RECOMMENDED METHOD: Automated Schedule Check
+
+**The easiest way** is to create clock events that run `charging.checkSchedule()` periodically, then configure your times via simple commands.
+
+### Quick Setup
+
+1. **Create one clock event file** that runs every 30 minutes:
+
+```bash
+ssh root@<your-ovms-ip>
+
+# Create the event file content
+EVENT_CONTENT="script eval charging.checkSchedule()"
+
+# Create clock events for every 30 minutes (48 events total)
+for hour in {0..23}; do
+    for minute in 00 30; do
+        DIR="/store/events/clock.$(printf '%02d%02d' $hour $minute)"
+        mkdir -p "$DIR"
+        echo "$EVENT_CONTENT" > "$DIR/charging-check"
+    done
+done
+
+echo "Clock events created!"
+```
+
+2. **Set your charging times via command** (no file editing needed!):
+
+```bash
+# SSH into OVMS or use the web console
+script eval charging.setSchedule(23, 30, 5, 30)
+```
+
+That's it! The system will automatically:
+- Check every 30 minutes if it's time to charge
+- Start charging at 23:30 if plugged in and SOC below threshold
+- Stop charging at 5:30
+
+3. **Change times anytime** without editing files:
+
+```bash
+script eval charging.setSchedule(22, 0, 6, 0)   # Change to 22:00-06:00
+script eval charging.getSchedule()               # View current schedule
+```
+
+### Benefits
+
+✅ **No file editing** - Just run commands to change times
+✅ **One-time setup** - Create events once, change times anytime
+✅ **Flexible** - Works with overnight schedules (23:30-05:30)
+✅ **Safe** - Won't start if already charged or unplugged
+
+---
+
+## Alternative: Manual Event Method
+
+If you prefer more control, you can create specific start/stop events manually.
+
 ## Event System Overview
 
 OVMS uses an event-driven system where specific actions can be triggered at specific times using "clock events". Clock events are organized in directories named `clock.HHMM` where `HHMM` is the 24-hour time.

@@ -4,9 +4,9 @@
  *
  * INSTALLATION:
  * 1. Save as: /store/scripts/lib/charging.js
- * 1. Add to /store/scripts/ovmsmain.js: charging = require("lib/charging");
- * 1. Create clock event files (see SETUP section below)
- * 1. Reload JS engine: Tools > Editor > "Reload JS Engine"
+ * 2. Add to /store/scripts/ovmsmain.js: charging = require("lib/charging");
+ * 3. Create ONE clock event for automatic scheduling (see SETUP section)
+ * 4. Reload JS engine: Tools > Editor > "Reload JS Engine"
  *
  * FEATURES:
  * - Auto-detects battery capacity and SOH from vehicle metrics
@@ -14,28 +14,44 @@
  * - Works with any charge rate (granny, Type 2, rapid)
  * - Prevents charging if SOC already sufficient
  * - Notifications for all actions (OVMS Connect app)
+ * - User-friendly runtime configuration (no file editing!)
  * - Universal - works with any OVMS-supported EV
  *
- * USAGE:
- * charging.status()                 - Show complete status
+ * USAGE - Information:
+ * charging.status()                  - Show complete status
  * charging.nextCharge()              - Quick view of next charge session
+ * charging.getSchedule()             - Show current schedule times
+ *
+ * USAGE - Manual Control:
  * charging.start()                   - Manual start
  * charging.stop()                    - Manual stop
+ *
+ * USAGE - Configuration:
+ * charging.setSchedule(23,30,5,30)   - Set start/stop times (23:30 to 5:30)
  * charging.setLimits(80,75)          - Set target and skip threshold
  * charging.setChargeRate(1.8)        - Set your charger's kW rating
- * charging.setReadyBy(7,30)          - Calculate optimal start for 7:30 ready
+ * charging.setReadyBy(7,30)          - Intelligent: ready by 7:30
  * charging.clearReadyBy()            - Back to fixed schedule
  *
- * SETUP:
- * Clock events trigger automatic charging. Create these files:
+ * USAGE - Automation:
+ * charging.checkSchedule()           - Check time and start/stop as needed
  *
- * /store/events/clock.2330/010-start-charge (adjust time as needed)
- * Content: script eval charging.start()
+ * SETUP - Easy Method (Recommended):
+ * Create ONE clock event that runs every 30 minutes:
  *
- * /store/events/clock.0530/010-stop-charge (adjust time as needed)
- * Content: script eval charging.stop()
+ * /store/events/clock.0000/charging-check
+ * /store/events/clock.0030/charging-check
+ * /store/events/clock.0100/charging-check
+ * ... (repeat for every 30-minute interval)
+ * Content: script eval charging.checkSchedule()
  *
- * Tip: For different start times, create different clock.HHMM folders
+ * Then set your times via command:
+ * script eval charging.setSchedule(23, 30, 5, 30)
+ *
+ * SETUP - Manual Method (Old way):
+ * Or create specific start/stop events:
+ * /store/events/clock.2330/start → script eval charging.start()
+ * /store/events/clock.0530/stop → script eval charging.stop()
  */
 
 // ============================================================================
@@ -365,6 +381,89 @@ exports.clearReadyBy = function() {
               " to " + pad(we.hour) + ":" + pad(we.minute);
     print(msg + "\n");
     OvmsNotify.Raise("info", "charge.config", msg);
+};
+
+/**
+ * Set automated charging schedule times
+ * User-friendly way to configure start/stop without editing files
+ */
+exports.setSchedule = function(startHour, startMin, stopHour, stopMin) {
+    if (startHour < 0 || startHour > 23 || stopHour < 0 || stopHour > 23 ||
+        startMin < 0 || startMin > 59 || stopMin < 0 || stopMin > 59) {
+        OvmsNotify.Raise("alert", "charge.config", "Invalid time values");
+        return;
+    }
+
+    config.cheapWindowStart = { hour: startHour, minute: startMin };
+    config.cheapWindowEnd = { hour: stopHour, minute: stopMin };
+
+    var msg = "Schedule: " + pad(startHour) + ":" + pad(startMin) +
+              " to " + pad(stopHour) + ":" + pad(stopMin);
+    print(msg + "\n");
+    OvmsNotify.Raise("info", "charge.config", msg);
+};
+
+/**
+ * Display current schedule configuration
+ */
+exports.getSchedule = function() {
+    var ws = config.cheapWindowStart;
+    var we = config.cheapWindowEnd;
+
+    var msg = "Charging Schedule:\n";
+    msg += "  Start: " + pad(ws.hour) + ":" + pad(ws.minute) + "\n";
+    msg += "  Stop: " + pad(we.hour) + ":" + pad(we.minute) + "\n";
+
+    if (config.readyBy) {
+        msg += "  Mode: Ready By " + pad(config.readyBy.hour) + ":" + pad(config.readyBy.minute);
+    } else {
+        msg += "  Mode: Fixed schedule";
+    }
+
+    print(msg + "\n");
+    OvmsNotify.Raise("info", "charge.config", msg);
+};
+
+/**
+ * Automated check - call this from a periodic clock event
+ * Checks current time and starts/stops charging as needed
+ */
+exports.checkSchedule = function() {
+    var now = new Date();
+    var currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    var ws = config.cheapWindowStart;
+    var we = config.cheapWindowEnd;
+    var startMinutes = ws.hour * 60 + ws.minute;
+    var stopMinutes = we.hour * 60 + we.minute;
+
+    var charging = getSafeMetric("v.c.charging", false);
+    var plugged = getSafeMetric("v.c.pilot", false);
+
+    // Handle overnight schedules (e.g., 23:30 to 05:30)
+    var inWindow = false;
+    if (startMinutes > stopMinutes) {
+        // Overnight: 23:30 to 05:30
+        inWindow = (currentMinutes >= startMinutes || currentMinutes < stopMinutes);
+    } else {
+        // Same day: 10:00 to 14:00
+        inWindow = (currentMinutes >= startMinutes && currentMinutes < stopMinutes);
+    }
+
+    // Decide what to do
+    if (inWindow && !charging && plugged) {
+        // In charging window, plugged in, not charging - try to start
+        var soc = getSafeMetric("v.b.soc", 0);
+        if (soc < config.skipIfAbove) {
+            print("Auto-start: In charging window (" + pad(ws.hour) + ":" + pad(ws.minute) +
+                  " to " + pad(we.hour) + ":" + pad(we.minute) + ")\n");
+            exports.start();
+        }
+    } else if (!inWindow && charging) {
+        // Outside charging window but still charging - stop
+        print("Auto-stop: Outside charging window\n");
+        exports.stop();
+    }
 };
 
 // ============================================================================

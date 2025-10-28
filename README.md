@@ -35,7 +35,28 @@ charging = require("lib/charging");
 
 ### 3. Create Clock Events
 
-Create event handler files to trigger automatic charging:
+**RECOMMENDED - Easy Method:** Create automated schedule checker (set times via commands, no file editing needed):
+
+```bash
+ssh root@<your-ovms-ip>
+
+# Create clock events that run every 30 minutes
+EVENT_CONTENT="script eval charging.checkSchedule()"
+for hour in {0..23}; do
+    for minute in 00 30; do
+        DIR="/store/events/clock.$(printf '%02d%02d' $hour $minute)"
+        mkdir -p "$DIR"
+        echo "$EVENT_CONTENT" > "$DIR/charging-check"
+    done
+done
+```
+
+Then set your charging times via command (no file editing!):
+```
+script eval charging.setSchedule(23, 30, 5, 30)
+```
+
+**Alternative - Manual Method:** Create specific start/stop events:
 
 **Start charging at 23:30** (11:30 PM):
 - Create directory: `/store/events/clock.2330/`
@@ -66,7 +87,24 @@ script reload
 
 ## Configuration
 
-Edit the `config` object at the top of `charging.js` to match your setup:
+**User-Friendly Method (Recommended):** Configure via commands - no file editing needed!
+
+```bash
+# Set charging schedule (start at 23:30, stop at 5:30)
+script eval charging.setSchedule(23, 30, 5, 30)
+
+# Set charger power rating
+script eval charging.setChargeRate(7.0)
+
+# Set SOC targets
+script eval charging.setLimits(80, 75)
+
+# View current settings
+script eval charging.getSchedule()
+script eval charging.status()
+```
+
+**Advanced Method:** Edit the `config` object in `charging.js` for default values:
 
 ```javascript
 var config = {
@@ -107,21 +145,26 @@ Common charge rates:
 Connect to your OVMS module via SSH or web console, then use:
 
 ```javascript
-// Show complete system status
-charging.status()
-
-// Quick view of next charge session
-charging.nextCharge()
+// Information commands
+charging.status()                   // Show complete status
+charging.nextCharge()               // Quick view of next charge session
+charging.getSchedule()              // Show current schedule times
 
 // Manual controls
 charging.start()                    // Start charging now
 charging.stop()                     // Stop charging now
 
-// Configuration
+// Schedule configuration (NEW - user-friendly!)
+charging.setSchedule(23, 30, 5, 30) // Set charging window (23:30 to 5:30)
+
+// Other configuration
 charging.setLimits(80, 75)          // Set target SOC to 80%, skip if above 75%
 charging.setChargeRate(7.0)         // Set charger to 7kW (Type 2 fast)
 charging.setReadyBy(7, 30)          // Ready by 7:30 AM (intelligent scheduling)
 charging.clearReadyBy()             // Return to fixed schedule
+
+// Automation (called by clock events)
+charging.checkSchedule()            // Check time and start/stop as needed
 ```
 
 ### Examples
