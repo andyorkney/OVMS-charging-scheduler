@@ -68,6 +68,15 @@ var batteryCache = null;
 var batteryCacheExpiry = 0;
 
 // ============================================================================
+// MODULE INITIALIZATION
+// ============================================================================
+
+// Ensure exports object exists (for OVMS compatibility)
+if (typeof exports === 'undefined') {
+    var exports = {};
+}
+
+// ============================================================================
 // BATTERY DETECTION
 // ============================================================================
 
@@ -532,3 +541,7 @@ PubSub.subscribe("usr.charge.stop", function(msg, data) {
 
 print("OVMS Smart Charging v1.0 loaded\n");
 print("Type 'charging.status()' for full status\n");
+
+// Return the exports object for module loading
+// (When using require(), this makes the module's functions available)
+exports;
