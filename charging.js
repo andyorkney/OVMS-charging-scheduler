@@ -149,57 +149,64 @@ function getBatteryParams() {
  * Display complete charging system status
  */
 exports.status = function() {
-    print("=== OVMS Smart Charging Status ===\n");
-    print("Time: " + new Date().toISOString() + "\n\n");
+    // Build status message
+    var msg = "=== OVMS Smart Charging Status ===\n";
+    msg += "Time: " + new Date().toISOString() + "\n\n";
 
     // Battery information
     var battery = getBatteryParams();
-    print("Battery:\n");
-    print("  Capacity: " + battery.capacity.toFixed(1) + " kWh\n");
-    print("  Health: " + battery.soh.toFixed(0) + "%\n");
-    print("  Usable: " + battery.usable.toFixed(1) + " kWh\n");
-    print("  Charge rate: " + config.chargeRateKW + " kW\n\n");
+    msg += "Battery:\n";
+    msg += "  Capacity: " + battery.capacity.toFixed(1) + " kWh\n";
+    msg += "  Health: " + battery.soh.toFixed(0) + "%\n";
+    msg += "  Usable: " + battery.usable.toFixed(1) + " kWh\n";
+    msg += "  Charge rate: " + config.chargeRateKW + " kW\n\n";
 
     // Schedule information
-    print("Schedule:\n");
+    msg += "Schedule:\n";
     var ws = config.cheapWindowStart;
     var we = config.cheapWindowEnd;
-    print("  Cheap rate: " + pad(ws.hour) + ":" + pad(ws.minute) +
-          " to " + pad(we.hour) + ":" + pad(we.minute) + "\n");
+    msg += "  Cheap rate: " + pad(ws.hour) + ":" + pad(ws.minute) +
+          " to " + pad(we.hour) + ":" + pad(we.minute) + "\n";
 
     if (config.readyBy) {
-        print("  Mode: Ready By " + pad(config.readyBy.hour) + ":" + pad(config.readyBy.minute) + "\n");
+        msg += "  Mode: Ready By " + pad(config.readyBy.hour) + ":" + pad(config.readyBy.minute) + "\n";
         var optimal = calculateOptimalStart();
         if (optimal) {
-            print("  Optimal start: " + pad(optimal.hour) + ":" + pad(optimal.minute) + "\n");
-            print("  Charge time: " + optimal.hoursNeeded.toFixed(1) + " hours\n");
+            msg += "  Optimal start: " + pad(optimal.hour) + ":" + pad(optimal.minute) + "\n";
+            msg += "  Charge time: " + optimal.hoursNeeded.toFixed(1) + " hours\n";
         }
     } else {
-        print("  Mode: Fixed schedule\n");
-        print("  Starts: " + pad(ws.hour) + ":" + pad(ws.minute) + "\n");
-        print("  Stops: " + pad(we.hour) + ":" + pad(we.minute) + "\n");
+        msg += "  Mode: Fixed schedule\n";
+        msg += "  Starts: " + pad(ws.hour) + ":" + pad(ws.minute) + "\n";
+        msg += "  Stops: " + pad(we.hour) + ":" + pad(we.minute) + "\n";
     }
 
-    print("  Target SOC: " + config.targetSOC + "%\n");
-    print("  Skip if above: " + config.skipIfAbove + "%\n\n");
+    msg += "  Target SOC: " + config.targetSOC + "%\n";
+    msg += "  Skip if above: " + config.skipIfAbove + "%\n\n";
 
     // Vehicle status
-    print("Vehicle:\n");
+    msg += "Vehicle:\n";
     var soc = getSafeMetric("v.b.soc", 0);
     var charging = getSafeMetric("v.c.charging", false);
     var state = getSafeMetric("v.c.state", "unknown");
     var plugged = getSafeMetric("v.c.pilot", false);
     var temp = getSafeMetric("v.b.temp", null);
 
-    print("  SOC: " + soc.toFixed(0) + "%\n");
-    print("  Charging: " + charging + "\n");
-    print("  State: " + state + "\n");
-    print("  Plugged in: " + plugged + "\n");
+    msg += "  SOC: " + soc.toFixed(0) + "%\n";
+    msg += "  Charging: " + charging + "\n";
+    msg += "  State: " + state + "\n";
+    msg += "  Plugged in: " + plugged + "\n";
     if (temp !== null) {
-        print("  Battery temp: " + temp.toFixed(0) + " C\n");
+        msg += "  Battery temp: " + temp.toFixed(0) + " C\n";
     }
 
-    print("\nReady to charge: " + canCharge() + "\n");
+    msg += "\nReady to charge: " + canCharge() + "\n";
+
+    // Output to console
+    print(msg);
+
+    // Send notification to OVMS Connect
+    OvmsNotify.Raise("info", "charge.status", msg);
 };
 
 /**
