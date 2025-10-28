@@ -280,6 +280,23 @@ Check with multimeter or EVSE display if unsure.
 3. Reload JS engine: **Tools > Editor > Reload JS Engine**
 4. Check for syntax errors in console output
 
+### Commands Show No Output
+
+If commands like `charging.status` show no output, you're missing the parentheses:
+
+```javascript
+// WRONG - No output (just references the function)
+script eval charging.status
+
+// CORRECT - Shows output (actually calls the function)
+script eval charging.status()
+```
+
+**Remember:** All function calls need `()` to execute:
+- `charging.status()` ✓
+- `charging.start()` ✓
+- `charging.nextCharge()` ✓
+
 ## Advanced Usage
 
 ### Multiple Charging Schedules
