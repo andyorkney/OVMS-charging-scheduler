@@ -2,6 +2,37 @@
 
 Universal charging scheduler with intelligent timing and cost optimization for OVMS (Open Vehicle Monitoring System).
 
+## Quick Start (For OVMS Connect Users)
+
+**Total time: ~5 minutes, no technical skills required!**
+
+1. **Upload files** via OVMS web interface (Tools > Editor):
+   - `charging.js` → `/store/scripts/lib/charging.js`
+   - `setup-events.js` → `/store/scripts/setup-events.js`
+
+2. **Edit** `/store/scripts/ovmsmain.js` and add:
+   ```javascript
+   charging = require("lib/charging");
+   ```
+
+3. **Run installer** in Tools > Shell:
+   ```javascript
+   setup = require("setup-events");
+   setup.install();
+   ```
+
+4. **Configure your schedule** in Tools > Shell:
+   ```javascript
+   charging.setSchedule(23, 30, 5, 30);  // Cheap rate: 11:30 PM - 5:30 AM
+   charging.setLimits(80, 75);            // Charge to 80%, skip if above 75%
+   ```
+
+5. **Reload JavaScript** in Tools > Editor: Click "Reload JS Engine"
+
+Done! Type `charging.status()` to check everything is working.
+
+---
+
 ## Features
 
 - **Auto-Detection**: Automatically detects battery capacity and State of Health (SOH) from vehicle metrics
@@ -10,6 +41,7 @@ Universal charging scheduler with intelligent timing and cost optimization for O
 - **Smart Prevention**: Prevents charging if State of Charge (SOC) is already sufficient
 - **Notifications**: Push notifications for all actions via OVMS Connect app
 - **Vehicle Agnostic**: Works with any OVMS-supported electric vehicle
+- **Power Efficient**: Event-driven architecture, zero continuous CPU load, minimal 12V battery impact
 
 ## Installation
 
@@ -35,7 +67,29 @@ charging = require("lib/charging");
 
 ### 3. Create Clock Events
 
-**RECOMMENDED - Easy Method:** Create automated schedule checker (set times via commands, no file editing needed):
+Choose ONE of these methods:
+
+#### Method A: Web Editor (Easiest - No SSH Required!)
+
+1. Upload `setup-events.js` via **Tools > Editor**:
+   - Create new file: `/store/scripts/setup-events.js`
+   - Copy the contents of `setup-events.js` from this repository
+   - Save the file
+
+2. Open **Tools > Shell** and run:
+   ```javascript
+   setup = require("setup-events");
+   setup.install();
+   ```
+
+3. Wait for "Installation complete!" message (creates 48 events automatically)
+
+4. Set your charging times via command (no file editing!):
+   ```javascript
+   charging.setSchedule(23, 30, 5, 30)
+   ```
+
+#### Method B: SSH (For Advanced Users)
 
 ```bash
 ssh root@<your-ovms-ip>
@@ -51,12 +105,12 @@ for hour in {0..23}; do
 done
 ```
 
-Then set your charging times via command (no file editing!):
+Then set your charging times via command:
 ```
 script eval charging.setSchedule(23, 30, 5, 30)
 ```
 
-**Alternative - Manual Method:** Create specific start/stop events:
+#### Method C: Manual Event Creation
 
 **Start charging at 23:30** (11:30 PM):
 - Create directory: `/store/events/clock.2330/`
@@ -382,6 +436,23 @@ All actions generate OVMS notifications that appear in the OVMS Connect mobile a
 - **Errors**: "Cannot start: not plugged in"
 
 ## Architecture
+
+### Repository Files
+
+```
+/
+├── charging.js           - Main charging module
+├── setup-events.js       - Event installer (web editor friendly)
+├── diagnostics.js        - Performance diagnostic tools
+├── README.md             - This file
+├── DIAGNOSTICS.md        - Troubleshooting guide
+└── examples/
+    ├── EVENTS_SETUP.md   - Detailed event configuration guide
+    ├── ovmsmain.js       - Example main script
+    ├── 010-start-charge  - Example start event
+    ├── 010-stop-charge   - Example stop event
+    └── charging-check    - Example schedule check event
+```
 
 ### Module Structure
 
