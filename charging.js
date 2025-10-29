@@ -1,5 +1,5 @@
 /**
- * OVMS Smart Charging Module v1.0
+ * OVMSv3 Module - Smart Charging Script v1.0
  * Universal charging scheduler with intelligent timing and cost optimisation
  *
  * QUICK START:
