@@ -383,6 +383,16 @@ Open source - use and modify as needed for your OVMS installation.
 - **OVMS Forums**: https://www.openvehicles.com/forum
 - **Vehicle Metrics**: Check your specific vehicle's metric names in OVMS
 
+## Credits
+
+This module is built for the **[OVMS v3 (Open Vehicle Monitoring System)](https://www.openvehicles.com/)** platform.
+
+### Special Thanks
+
+- **[OVMS v3 Platform](https://www.openvehicles.com/)** - The open-source vehicle monitoring system that makes this possible
+- **[PyOVMS Control](https://github.com/crash-override)** - © 2025 | Version 1.14.0 | Crafted with ♥ by schorle & Crash_Override
+- **OVMS Connect App** - Mobile companion for notifications and monitoring
+
 ## Version History
 
 - **v1.0** (2025-10-25): Initial release
