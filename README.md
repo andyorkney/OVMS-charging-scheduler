@@ -15,21 +15,24 @@ Universal charging scheduler with intelligent timing and cost optimization for O
    charging = require("lib/charging");
    ```
 
-3. **Run installer** in Tools > Shell:
-   ```javascript
-   setup = require("setup-events");
-   setup.install();
+3. **Run installer** in Tools > Shell (or via SSH):
    ```
+   OVMS# script eval setup = require("setup-events"); setup.install();
+   ```
+   Wait for "Installation complete!" message
 
-4. **Configure your schedule** in Tools > Shell:
-   ```javascript
-   charging.setSchedule(23, 30, 5, 30);  // Cheap rate: 11:30 PM - 5:30 AM
-   charging.setLimits(80, 75);            // Charge to 80%, skip if above 75%
+4. **Configure your schedule**:
+   ```
+   OVMS# script eval charging.setSchedule(23, 30, 5, 30);
+   OVMS# script eval charging.setLimits(80, 75);
    ```
 
 5. **Reload JavaScript** in Tools > Editor: Click "Reload JS Engine"
 
-Done! Type `charging.status()` to check everything is working.
+Done! Check status with:
+```
+OVMS# script eval charging.status();
+```
 
 ---
 
@@ -76,17 +79,16 @@ Choose ONE of these methods:
    - Copy the contents of `setup-events.js` from this repository
    - Save the file
 
-2. Open **Tools > Shell** and run:
-   ```javascript
-   setup = require("setup-events");
-   setup.install();
+2. Open **Tools > Shell** (or SSH) and run:
+   ```
+   OVMS# script eval setup = require("setup-events"); setup.install();
    ```
 
 3. Wait for "Installation complete!" message (creates 48 events automatically)
 
-4. Set your charging times via command (no file editing!):
-   ```javascript
-   charging.setSchedule(23, 30, 5, 30)
+4. Set your charging times:
+   ```
+   OVMS# script eval charging.setSchedule(23, 30, 5, 30);
    ```
 
 #### Method B: SSH (For Advanced Users)
