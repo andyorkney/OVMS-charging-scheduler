@@ -1,6 +1,6 @@
 /**
  * OVMS Smart Charging Module v1.0
- * Universal charging scheduler with intelligent timing and cost optimization
+ * Universal charging scheduler with intelligent timing and cost optimisation
  *
  * QUICK START:
  * 1. Upload charging.js to /store/scripts/lib/charging.js
