@@ -1,6 +1,6 @@
 # OVMS Smart Charging Module v1.0
 
-Universal charging scheduler with intelligent timing and cost optimization for OVMS (Open Vehicle Monitoring System).
+Universal charging scheduler with intelligent timing and cost optimisation for OVMS (Open Vehicle Monitoring System).
 
 ## Quick Start 
 
