@@ -4,9 +4,9 @@
  *
  * INSTALLATION:
  * 1. Save as: /store/scripts/lib/charging.js
- * 1. Add to /store/scripts/ovmsmain.js: charging = require("lib/charging");
- * 1. Create clock event files (see SETUP section below)
- * 1. Reload JS engine: Tools > Editor > "Reload JS Engine"
+ * 2. Add to /store/scripts/ovmsmain.js: charging = require("lib/charging");
+ * 3. Create clock event files (see SETUP section below)
+ * 4. Reload JS engine: Tools > Editor > "Reload JS Engine"
  *
  * FEATURES:
  * - Auto-detects battery capacity and SOH from vehicle metrics
