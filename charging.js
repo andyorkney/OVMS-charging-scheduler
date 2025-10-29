@@ -121,7 +121,7 @@ function getBatteryParams() {
     }
 
     // Fallback defaults
-    if (!capacity || capacity < 10 || capacity > 200) {
+    if (!capacity || capacity < 10 || capacity > 250) {
         capacity = 40; // Reasonable mid-size EV default
     }
     if (!soh || soh < 50 || soh > 100) {
@@ -206,7 +206,11 @@ exports.status = function() {
     print(msg);
 
     // Send notification to OVMS Connect
-    OvmsNotify.Raise("info", "charge.status", msg);
+    try {
+        OvmsNotify.Raise("info", "charge.status", msg);
+    } catch (e) {
+        // Notification system unavailable - continue without it
+    }
 };
 
 /**
@@ -222,7 +226,11 @@ exports.nextCharge = function() {
               ", SOC " + soc.toFixed(0) + "% to " + config.targetSOC + "%";
 
     print(msg + "\n");
-    OvmsNotify.Raise("info", "charge.schedule", msg);
+    try {
+        OvmsNotify.Raise("info", "charge.schedule", msg);
+    } catch (e) {
+        // Notification system unavailable
+    }
 };
 
 // ============================================================================
@@ -239,7 +247,11 @@ exports.start = function() {
     if (!canCharge()) {
         var reason = getChargeBlockReason();
         print("Cannot start: " + reason + "\n");
-        OvmsNotify.Raise("alert", "charge.manual", "Cannot start: " + reason);
+        try {
+            OvmsNotify.Raise("alert", "charge.manual", "Cannot start: " + reason);
+        } catch (e) {
+            // Notification unavailable
+        }
         return false;
     }
 
@@ -250,14 +262,34 @@ exports.start = function() {
         var result = OvmsCommand.Exec("charge start");
         print("Result: " + result + "\n");
 
-        OvmsNotify.Raise("info", "charge.manual", "Charging started at " + soc.toFixed(0) + "%");
+        // Validate command result
+        if (result && (result.toLowerCase().indexOf("error") !== -1 ||
+                       result.toLowerCase().indexOf("fail") !== -1)) {
+            print("Command returned error status\n");
+            try {
+                OvmsNotify.Raise("alert", "charge.manual", "Start command failed: " + result);
+            } catch (ne) {
+                // Notification unavailable
+            }
+            return false;
+        }
+
+        try {
+            OvmsNotify.Raise("info", "charge.manual", "Charging started at " + soc.toFixed(0) + "%");
+        } catch (ne) {
+            // Notification unavailable
+        }
 
         // Schedule automatic stop
         scheduleStop();
         return true;
     } catch (e) {
         print("Error: " + e.message + "\n");
-        OvmsNotify.Raise("alert", "charge.manual", "Start failed: " + e.message);
+        try {
+            OvmsNotify.Raise("alert", "charge.manual", "Start failed: " + e.message);
+        } catch (ne) {
+            // Notification unavailable
+        }
         return false;
     }
 };
@@ -271,7 +303,11 @@ exports.stop = function() {
     var charging = getSafeMetric("v.c.charging", false);
     if (!charging) {
         print("Not charging\n");
-        OvmsNotify.Raise("info", "charge.manual", "Not currently charging");
+        try {
+            OvmsNotify.Raise("info", "charge.manual", "Not currently charging");
+        } catch (e) {
+            // Notification unavailable
+        }
         return true;
     }
 
@@ -282,11 +318,31 @@ exports.stop = function() {
         var result = OvmsCommand.Exec("charge stop");
         print("Result: " + result + "\n");
 
-        OvmsNotify.Raise("info", "charge.manual", "Stopped at " + soc.toFixed(0) + "%");
+        // Validate command result
+        if (result && (result.toLowerCase().indexOf("error") !== -1 ||
+                       result.toLowerCase().indexOf("fail") !== -1)) {
+            print("Command returned error status\n");
+            try {
+                OvmsNotify.Raise("alert", "charge.manual", "Stop command failed: " + result);
+            } catch (ne) {
+                // Notification unavailable
+            }
+            return false;
+        }
+
+        try {
+            OvmsNotify.Raise("info", "charge.manual", "Stopped at " + soc.toFixed(0) + "%");
+        } catch (ne) {
+            // Notification unavailable
+        }
         return true;
     } catch (e) {
         print("Error: " + e.message + "\n");
-        OvmsNotify.Raise("alert", "charge.manual", "Stop failed: " + e.message);
+        try {
+            OvmsNotify.Raise("alert", "charge.manual", "Stop failed: " + e.message);
+        } catch (ne) {
+            // Notification unavailable
+        }
         return false;
     }
 };
@@ -300,16 +356,25 @@ exports.stop = function() {
  */
 exports.setLimits = function(target, skipIfAbove) {
     if (target < 20 || target > 100 || skipIfAbove < 10 || skipIfAbove > 100) {
-        OvmsNotify.Raise("alert", "charge.config", "Invalid SOC values");
+        try {
+            OvmsNotify.Raise("alert", "charge.config", "Invalid SOC values");
+        } catch (e) {
+            // Notification unavailable
+        }
         return;
     }
 
     config.targetSOC = target;
     config.skipIfAbove = skipIfAbove;
+    invalidateBatteryCache(); // Recalculate timing with new target
 
     var msg = "Target " + target + "%, skip if above " + skipIfAbove + "%";
     print(msg + "\n");
-    OvmsNotify.Raise("info", "charge.config", msg);
+    try {
+        OvmsNotify.Raise("info", "charge.config", msg);
+    } catch (e) {
+        // Notification unavailable
+    }
 };
 
 /**
@@ -317,17 +382,26 @@ exports.setLimits = function(target, skipIfAbove) {
  */
 exports.setChargeRate = function(rateKW) {
     if (rateKW < 1 || rateKW > 350) {
-        OvmsNotify.Raise("alert", "charge.config", "Invalid charge rate");
+        try {
+            OvmsNotify.Raise("alert", "charge.config", "Invalid charge rate");
+        } catch (e) {
+            // Notification unavailable
+        }
         return;
     }
 
     config.chargeRateKW = rateKW;
+    invalidateBatteryCache(); // Recalculate timing with new rate
 
     var type = rateKW < 2.5 ? "granny" : rateKW < 4 ? "Type 2 slow" :
                rateKW < 10 ? "Type 2 fast" : "rapid";
     var msg = "Charge rate: " + rateKW + " kW (" + type + ")";
     print(msg + "\n");
-    OvmsNotify.Raise("info", "charge.config", msg);
+    try {
+        OvmsNotify.Raise("info", "charge.config", msg);
+    } catch (e) {
+        // Notification unavailable
+    }
 };
 
 /**
@@ -335,7 +409,11 @@ exports.setChargeRate = function(rateKW) {
  */
 exports.setReadyBy = function(hour, minute) {
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-        OvmsNotify.Raise("alert", "charge.config", "Invalid time");
+        try {
+            OvmsNotify.Raise("alert", "charge.config", "Invalid time");
+        } catch (e) {
+            // Notification unavailable
+        }
         return;
     }
 
@@ -347,9 +425,17 @@ exports.setReadyBy = function(hour, minute) {
                   ", start " + pad(optimal.hour) + ":" + pad(optimal.minute);
         print(msg + "\n");
         print("Charge time needed: " + optimal.hoursNeeded.toFixed(1) + " hours\n");
-        OvmsNotify.Raise("info", "charge.config", msg);
+        try {
+            OvmsNotify.Raise("info", "charge.config", msg);
+        } catch (e) {
+            // Notification unavailable
+        }
     } else {
-        OvmsNotify.Raise("alert", "charge.config", "Cannot calculate - check settings");
+        try {
+            OvmsNotify.Raise("alert", "charge.config", "Cannot calculate - check settings");
+        } catch (e) {
+            // Notification unavailable
+        }
     }
 };
 
@@ -364,12 +450,24 @@ exports.clearReadyBy = function() {
     var msg = "Fixed: " + pad(ws.hour) + ":" + pad(ws.minute) +
               " to " + pad(we.hour) + ":" + pad(we.minute);
     print(msg + "\n");
-    OvmsNotify.Raise("info", "charge.config", msg);
+    try {
+        OvmsNotify.Raise("info", "charge.config", msg);
+    } catch (e) {
+        // Notification unavailable
+    }
 };
 
 // ============================================================================
 // INTERNAL HELPERS
 // ============================================================================
+
+/**
+ * Invalidate battery parameter cache
+ */
+function invalidateBatteryCache() {
+    batteryCache = null;
+    batteryCacheExpiry = 0;
+}
 
 /**
  * Check if vehicle can charge right now
@@ -512,6 +610,10 @@ function getSafeMetric(name, defaultValue) {
 
         if (typeof defaultValue === "number") {
             return OvmsMetrics.AsFloat(name);
+        } else if (typeof defaultValue === "boolean") {
+            var val = OvmsMetrics.Value(name);
+            // OVMS may return "yes"/"no", "true"/"false", or actual booleans
+            return val === "yes" || val === "true" || val === true || val === 1;
         }
         return OvmsMetrics.Value(name);
     } catch (e) {
