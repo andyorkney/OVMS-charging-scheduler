@@ -2,13 +2,25 @@
 
 This guide explains how to set up clock event files on your OVMS module to enable automatic charging.
 
-## ⭐ RECOMMENDED METHOD: Automated Schedule Check
+## ⭐ RECOMMENDED METHOD: Automated Installer (No SSH Required!)
 
-**The easiest way** is to create clock events that run `charging.checkSchedule()` periodically, then configure your times via simple commands.
+**The easiest way** is to use the JavaScript installer via the OVMS web interface:
 
-### Quick Setup
+1. Upload `setup-events.js` to `/store/scripts/setup-events.js` (via Tools > Editor)
+2. Open Tools > Shell and run:
+   ```javascript
+   setup = require("setup-events");
+   setup.install();
+   ```
+3. Done! 48 clock events created automatically
 
-1. **Create one clock event file** that runs every 30 minutes:
+See the main README.md for complete installation instructions.
+
+---
+
+## Alternative: Manual SSH Setup
+
+If you prefer command-line setup or need to customize:
 
 ```bash
 ssh root@<your-ovms-ip>
@@ -40,39 +52,22 @@ That's it! The system will automatically:
 - Start charging at 23:30 if plugged in and SOC below threshold
 - Stop charging at 5:30
 
-3. **Change times anytime** without editing files:
-
+**Change times anytime** without editing files:
 ```bash
 script eval charging.setSchedule(22, 0, 6, 0)   # Change to 22:00-06:00
 script eval charging.getSchedule()               # View current schedule
 ```
 
-### Benefits
-
-✅ **No file editing** - Just run commands to change times
-✅ **One-time setup** - Create events once, change times anytime
-✅ **Flexible** - Works with overnight schedules (23:30-05:30)
-✅ **Safe** - Won't start if already charged or unplugged
-
 ---
 
-## Alternative: Manual Event Method
+## Manual Event Method
 
-If you prefer more control, you can create specific start/stop events manually.
+For advanced users who want fine-grained control over individual clock events.
 
-## Event System Overview
+### Directory Structure
 
-OVMS uses an event-driven system where specific actions can be triggered at specific times using "clock events". Clock events are organized in directories named `clock.HHMM` where `HHMM` is the 24-hour time.
+Clock events are stored in `/store/events/clock.HHMM/` where `HHMM` is 24-hour time:
 
-## Directory Structure
-
-On your OVMS module, event files should be created in:
-
-```
-/store/events/clock.HHMM/filename
-```
-
-For example:
 ```
 /store/events/clock.2330/010-start-charge
 /store/events/clock.0530/010-stop-charge

@@ -2,11 +2,15 @@
  * OVMS Smart Charging Module v1.0
  * Universal charging scheduler with intelligent timing and cost optimization
  *
- * INSTALLATION:
- * 1. Save as: /store/scripts/lib/charging.js
- * 2. Add to /store/scripts/ovmsmain.js: charging = require("lib/charging");
- * 3. Create ONE clock event for automatic scheduling (see SETUP section)
- * 4. Reload JS engine: Tools > Editor > "Reload JS Engine"
+ * QUICK START:
+ * 1. Upload charging.js to /store/scripts/lib/charging.js
+ * 2. Upload setup-events.js to /store/scripts/setup-events.js
+ * 3. Add to /store/scripts/ovmsmain.js: charging = require("lib/charging");
+ * 4. Run: setup = require("setup-events"); setup.install();
+ * 5. Configure: charging.setSchedule(23, 30, 5, 30);
+ * 6. Reload JS engine: Tools > Editor > "Reload JS Engine"
+ *
+ * See README.md for complete installation guide and troubleshooting
  *
  * PERFORMANCE:
  * - Module load time: <10ms typical
@@ -42,22 +46,16 @@
  * USAGE - Automation:
  * charging.checkSchedule()           - Check time and start/stop as needed
  *
- * SETUP - Easy Method (Recommended):
- * Create ONE clock event that runs every 30 minutes:
+ * SETUP:
+ * Use the setup-events.js installer to create clock events automatically:
+ *   setup = require("setup-events");
+ *   setup.install();
  *
- * /store/events/clock.0000/charging-check
- * /store/events/clock.0030/charging-check
- * /store/events/clock.0100/charging-check
- * ... (repeat for every 30-minute interval)
- * Content: script eval charging.checkSchedule()
+ * Then configure your schedule:
+ *   charging.setSchedule(23, 30, 5, 30)
+ *   charging.setLimits(80, 75)
  *
- * Then set your times via command:
- * script eval charging.setSchedule(23, 30, 5, 30)
- *
- * SETUP - Manual Method (Old way):
- * Or create specific start/stop events:
- * /store/events/clock.2330/start → script eval charging.start()
- * /store/events/clock.0530/stop → script eval charging.stop()
+ * For detailed installation instructions, see README.md
  */
 
 // ============================================================================
@@ -234,11 +232,7 @@ exports.status = function() {
     print(msg);
 
     // Send notification to OVMS Connect
-    try {
-        OvmsNotify.Raise("info", "charge.status", msg);
-    } catch (e) {
-        // Notification system unavailable - continue without it
-    }
+    safeNotify("info", "charge.status", msg);
 };
 
 /**
@@ -254,11 +248,7 @@ exports.nextCharge = function() {
               ", SOC " + soc.toFixed(0) + "% to " + config.targetSOC + "%";
 
     print(msg + "\n");
-    try {
-        OvmsNotify.Raise("info", "charge.schedule", msg);
-    } catch (e) {
-        // Notification system unavailable
-    }
+    safeNotify("info", "charge.schedule", msg);
 };
 
 // ============================================================================
@@ -275,11 +265,7 @@ exports.start = function() {
     if (!canCharge()) {
         var reason = getChargeBlockReason();
         print("Cannot start: " + reason + "\n");
-        try {
-            OvmsNotify.Raise("alert", "charge.manual", "Cannot start: " + reason);
-        } catch (e) {
-            // Notification unavailable
-        }
+        safeNotify("alert", "charge.manual", "Cannot start: " + reason);
         return false;
     }
 
@@ -294,30 +280,18 @@ exports.start = function() {
         if (result && (result.toLowerCase().indexOf("error") !== -1 ||
                        result.toLowerCase().indexOf("fail") !== -1)) {
             print("Command returned error status\n");
-            try {
-                OvmsNotify.Raise("alert", "charge.manual", "Start command failed: " + result);
-            } catch (ne) {
-                // Notification unavailable
-            }
+            safeNotify("alert", "charge.manual", "Start command failed: " + result);
             return false;
         }
 
-        try {
-            OvmsNotify.Raise("info", "charge.manual", "Charging started at " + soc.toFixed(0) + "%");
-        } catch (ne) {
-            // Notification unavailable
-        }
+        safeNotify("info", "charge.manual", "Charging started at " + soc.toFixed(0) + "%");
 
         // Schedule automatic stop
         scheduleStop();
         return true;
     } catch (e) {
         print("Error: " + e.message + "\n");
-        try {
-            OvmsNotify.Raise("alert", "charge.manual", "Start failed: " + e.message);
-        } catch (ne) {
-            // Notification unavailable
-        }
+        safeNotify("alert", "charge.manual", "Start failed: " + e.message);
         return false;
     }
 };
@@ -331,11 +305,7 @@ exports.stop = function() {
     var charging = getSafeMetric("v.c.charging", false);
     if (!charging) {
         print("Not charging\n");
-        try {
-            OvmsNotify.Raise("info", "charge.manual", "Not currently charging");
-        } catch (e) {
-            // Notification unavailable
-        }
+        safeNotify("info", "charge.manual", "Not currently charging");
         return true;
     }
 
@@ -350,27 +320,15 @@ exports.stop = function() {
         if (result && (result.toLowerCase().indexOf("error") !== -1 ||
                        result.toLowerCase().indexOf("fail") !== -1)) {
             print("Command returned error status\n");
-            try {
-                OvmsNotify.Raise("alert", "charge.manual", "Stop command failed: " + result);
-            } catch (ne) {
-                // Notification unavailable
-            }
+            safeNotify("alert", "charge.manual", "Stop command failed: " + result);
             return false;
         }
 
-        try {
-            OvmsNotify.Raise("info", "charge.manual", "Stopped at " + soc.toFixed(0) + "%");
-        } catch (ne) {
-            // Notification unavailable
-        }
+        safeNotify("info", "charge.manual", "Stopped at " + soc.toFixed(0) + "%");
         return true;
     } catch (e) {
         print("Error: " + e.message + "\n");
-        try {
-            OvmsNotify.Raise("alert", "charge.manual", "Stop failed: " + e.message);
-        } catch (ne) {
-            // Notification unavailable
-        }
+        safeNotify("alert", "charge.manual", "Stop failed: " + e.message);
         return false;
     }
 };
@@ -384,11 +342,7 @@ exports.stop = function() {
  */
 exports.setLimits = function(target, skipIfAbove) {
     if (target < 20 || target > 100 || skipIfAbove < 10 || skipIfAbove > 100) {
-        try {
-            OvmsNotify.Raise("alert", "charge.config", "Invalid SOC values");
-        } catch (e) {
-            // Notification unavailable
-        }
+        safeNotify("alert", "charge.config", "Invalid SOC values");
         return;
     }
 
@@ -398,11 +352,7 @@ exports.setLimits = function(target, skipIfAbove) {
 
     var msg = "Target " + target + "%, skip if above " + skipIfAbove + "%";
     print(msg + "\n");
-    try {
-        OvmsNotify.Raise("info", "charge.config", msg);
-    } catch (e) {
-        // Notification unavailable
-    }
+    safeNotify("info", "charge.config", msg);
 };
 
 /**
@@ -410,11 +360,7 @@ exports.setLimits = function(target, skipIfAbove) {
  */
 exports.setChargeRate = function(rateKW) {
     if (rateKW < 1 || rateKW > 350) {
-        try {
-            OvmsNotify.Raise("alert", "charge.config", "Invalid charge rate");
-        } catch (e) {
-            // Notification unavailable
-        }
+        safeNotify("alert", "charge.config", "Invalid charge rate");
         return;
     }
 
@@ -425,11 +371,7 @@ exports.setChargeRate = function(rateKW) {
                rateKW < 10 ? "Type 2 fast" : "rapid";
     var msg = "Charge rate: " + rateKW + " kW (" + type + ")";
     print(msg + "\n");
-    try {
-        OvmsNotify.Raise("info", "charge.config", msg);
-    } catch (e) {
-        // Notification unavailable
-    }
+    safeNotify("info", "charge.config", msg);
 };
 
 /**
@@ -437,11 +379,7 @@ exports.setChargeRate = function(rateKW) {
  */
 exports.setReadyBy = function(hour, minute) {
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-        try {
-            OvmsNotify.Raise("alert", "charge.config", "Invalid time");
-        } catch (e) {
-            // Notification unavailable
-        }
+        safeNotify("alert", "charge.config", "Invalid time");
         return;
     }
 
@@ -453,17 +391,9 @@ exports.setReadyBy = function(hour, minute) {
                   ", start " + pad(optimal.hour) + ":" + pad(optimal.minute);
         print(msg + "\n");
         print("Charge time needed: " + optimal.hoursNeeded.toFixed(1) + " hours\n");
-        try {
-            OvmsNotify.Raise("info", "charge.config", msg);
-        } catch (e) {
-            // Notification unavailable
-        }
+        safeNotify("info", "charge.config", msg);
     } else {
-        try {
-            OvmsNotify.Raise("alert", "charge.config", "Cannot calculate - check settings");
-        } catch (e) {
-            // Notification unavailable
-        }
+        safeNotify("alert", "charge.config", "Cannot calculate - check settings");
     }
 };
 
@@ -478,11 +408,7 @@ exports.clearReadyBy = function() {
     var msg = "Fixed: " + pad(ws.hour) + ":" + pad(ws.minute) +
               " to " + pad(we.hour) + ":" + pad(we.minute);
     print(msg + "\n");
-    try {
-        OvmsNotify.Raise("info", "charge.config", msg);
-    } catch (e) {
-        // Notification unavailable
-    }
+    safeNotify("info", "charge.config", msg);
 };
 
 /**
@@ -492,7 +418,7 @@ exports.clearReadyBy = function() {
 exports.setSchedule = function(startHour, startMin, stopHour, stopMin) {
     if (startHour < 0 || startHour > 23 || stopHour < 0 || stopHour > 23 ||
         startMin < 0 || startMin > 59 || stopMin < 0 || stopMin > 59) {
-        OvmsNotify.Raise("alert", "charge.config", "Invalid time values");
+        safeNotify("alert", "charge.config", "Invalid time values");
         return;
     }
 
@@ -502,7 +428,7 @@ exports.setSchedule = function(startHour, startMin, stopHour, stopMin) {
     var msg = "Schedule: " + pad(startHour) + ":" + pad(startMin) +
               " to " + pad(stopHour) + ":" + pad(stopMin);
     print(msg + "\n");
-    OvmsNotify.Raise("info", "charge.config", msg);
+    safeNotify("info", "charge.config", msg);
 };
 
 /**
@@ -523,7 +449,7 @@ exports.getSchedule = function() {
     }
 
     print(msg + "\n");
-    OvmsNotify.Raise("info", "charge.config", msg);
+    safeNotify("info", "charge.config", msg);
 };
 
 /**
@@ -729,6 +655,17 @@ function getSafeMetric(name, defaultValue) {
         return OvmsMetrics.Value(name);
     } catch (e) {
         return defaultValue;
+    }
+}
+
+/**
+ * Safely send notification (with graceful fallback if unavailable)
+ */
+function safeNotify(level, subtype, message) {
+    try {
+        OvmsNotify.Raise(level, subtype, message);
+    } catch (e) {
+        // Notification system unavailable - continue without it
     }
 }
 
