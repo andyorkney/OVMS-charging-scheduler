@@ -2,11 +2,15 @@
  * OVMS Smart Charging Module v1.0
  * Universal charging scheduler with intelligent timing and cost optimization
  *
- * INSTALLATION:
- * 1. Save as: /store/scripts/lib/charging.js
- * 2. Add to /store/scripts/ovmsmain.js: charging = require("lib/charging");
- * 3. Create ONE clock event for automatic scheduling (see SETUP section)
- * 4. Reload JS engine: Tools > Editor > "Reload JS Engine"
+ * QUICK START:
+ * 1. Upload charging.js to /store/scripts/lib/charging.js
+ * 2. Upload setup-events.js to /store/scripts/setup-events.js
+ * 3. Add to /store/scripts/ovmsmain.js: charging = require("lib/charging");
+ * 4. Run: setup = require("setup-events"); setup.install();
+ * 5. Configure: charging.setSchedule(23, 30, 5, 30);
+ * 6. Reload JS engine: Tools > Editor > "Reload JS Engine"
+ *
+ * See README.md for complete installation guide and troubleshooting
  *
  * PERFORMANCE:
  * - Module load time: <10ms typical
@@ -42,22 +46,16 @@
  * USAGE - Automation:
  * charging.checkSchedule()           - Check time and start/stop as needed
  *
- * SETUP - Easy Method (Recommended):
- * Create ONE clock event that runs every 30 minutes:
+ * SETUP:
+ * Use the setup-events.js installer to create clock events automatically:
+ *   setup = require("setup-events");
+ *   setup.install();
  *
- * /store/events/clock.0000/charging-check
- * /store/events/clock.0030/charging-check
- * /store/events/clock.0100/charging-check
- * ... (repeat for every 30-minute interval)
- * Content: script eval charging.checkSchedule()
+ * Then configure your schedule:
+ *   charging.setSchedule(23, 30, 5, 30)
+ *   charging.setLimits(80, 75)
  *
- * Then set your times via command:
- * script eval charging.setSchedule(23, 30, 5, 30)
- *
- * SETUP - Manual Method (Old way):
- * Or create specific start/stop events:
- * /store/events/clock.2330/start → script eval charging.start()
- * /store/events/clock.0530/stop → script eval charging.stop()
+ * For detailed installation instructions, see README.md
  */
 
 // ============================================================================
