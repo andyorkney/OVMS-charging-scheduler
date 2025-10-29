@@ -59,11 +59,11 @@ function install() {
             var filePath = dirPath + "/charging-check";
 
             try {
-                // Create directory
-                VFS.Mkdir(dirPath);
-
-                // Create event file
-                VFS.Save(filePath, eventContent);
+                // VFS.Save automatically creates missing directories
+                VFS.Save({
+                    path: filePath,
+                    data: eventContent
+                });
 
                 created++;
                 print("✓ Created: " + dirName + "/charging-check\n");
@@ -117,17 +117,22 @@ function uninstall() {
             var filePath = "/store/events/" + dirName + "/charging-check";
 
             try {
-                // Remove event file
-                VFS.Rm(filePath);
-                removed++;
-                print("✓ Removed: " + dirName + "/charging-check\n");
-            } catch (e) {
-                // File might not exist, that's okay
-                if (e.message.indexOf("not found") === -1 &&
-                    e.message.indexOf("No such") === -1) {
+                // Remove event file using vfs command
+                var result = OvmsCommand.Exec("vfs rm " + filePath);
+
+                // Check if command succeeded (file not found is okay)
+                if (result && result.indexOf("Error") !== -1 &&
+                    result.indexOf("not found") === -1 &&
+                    result.indexOf("No such") === -1) {
                     errors++;
-                    print("✗ Error removing " + dirName + ": " + e.message + "\n");
+                    print("✗ Error removing " + dirName + ": " + result + "\n");
+                } else {
+                    removed++;
+                    print("✓ Removed: " + dirName + "/charging-check\n");
                 }
+            } catch (e) {
+                errors++;
+                print("✗ Error removing " + dirName + ": " + e.message + "\n");
             }
 
             // Note: We don't remove the directories themselves as they might contain
@@ -167,16 +172,16 @@ function listEvents() {
             var dirName = "clock." + hourStr + minStr;
             var filePath = "/store/events/" + dirName + "/charging-check";
 
-            try {
-                // Check if file exists by trying to read it
-                var content = VFS.Load(filePath);
+            // Check if file exists using vfs stat command
+            var result = OvmsCommand.Exec("vfs stat " + filePath);
+
+            // If stat succeeds, the file exists (no "Error" in output)
+            if (result && result.indexOf("Error") === -1 && result.indexOf("not found") === -1) {
                 found++;
 
                 // Format time nicely (e.g., 00:00, 01:30, 23:30)
                 var timeStr = hourStr + ":" + minStr;
                 print("✓ " + timeStr + " - " + dirName + "/charging-check\n");
-            } catch (e) {
-                // File doesn't exist, skip silently
             }
         }
     }
