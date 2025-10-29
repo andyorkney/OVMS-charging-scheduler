@@ -8,22 +8,24 @@
  * 2. Create new file: /store/scripts/setup-events.js
  * 3. Copy this entire file content
  * 4. Save the file
- * 5. Go to Tools → Shell and run:
- *    OVMS# script eval setup = require("setup-events"); setup.install();
- * 6. Wait for "Installation complete!" message
+ * 5. Go to Tools → Shell
+ * 6. At the OVMS shell prompt, enter:
+ *    script eval setup = require("setup-events"); setup.install();
+ * 7. Wait for "Installation complete!" message
  *
  * INSTALLATION VIA SSH:
  * 1. scp setup-events.js root@<your-ovms-ip>:/store/scripts/
  * 2. SSH to OVMS: ssh root@<your-ovms-ip>
- * 3. Run: OVMS# script eval setup = require("setup-events"); setup.install();
+ * 3. At the OVMS shell prompt, enter:
+ *    script eval setup = require("setup-events"); setup.install();
  *
  * VERIFICATION:
- * OVMS# vfs ls /store/events/
+ * vfs ls /store/events/
  * You should see 48 directories: clock.0000, clock.0030, clock.0100, ..., clock.2330
  *
  * REMOVAL:
- * If you want to uninstall:
- * OVMS# script eval setup = require("setup-events"); setup.uninstall();
+ * To uninstall:
+ * script eval setup = require("setup-events"); setup.uninstall();
  */
 
 // ============================================================================

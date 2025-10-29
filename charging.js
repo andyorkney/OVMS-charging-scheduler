@@ -6,8 +6,10 @@
  * 1. Upload charging.js to /store/scripts/lib/charging.js
  * 2. Upload setup-events.js to /store/scripts/setup-events.js
  * 3. Add to /store/scripts/ovmsmain.js: charging = require("lib/charging");
- * 4. Run: OVMS# script eval setup = require("setup-events"); setup.install();
- * 5. Configure: OVMS# script eval charging.setSchedule(23, 30, 5, 30);
+ * 4. At the OVMS shell prompt, run:
+ *    script eval setup = require("setup-events"); setup.install();
+ * 5. Configure schedule:
+ *    script eval charging.setSchedule(23, 30, 5, 30);
  * 6. Reload JS engine: Tools > Editor > "Reload JS Engine"
  *
  * See README.md for complete installation guide and troubleshooting
@@ -48,11 +50,11 @@
  *
  * SETUP:
  * Use the setup-events.js installer to create clock events automatically:
- *   OVMS# script eval setup = require("setup-events"); setup.install();
+ *   script eval setup = require("setup-events"); setup.install();
  *
  * Then configure your schedule:
- *   OVMS# script eval charging.setSchedule(23, 30, 5, 30);
- *   OVMS# script eval charging.setLimits(80, 75);
+ *   script eval charging.setSchedule(23, 30, 5, 30);
+ *   script eval charging.setLimits(80, 75);
  *
  * For detailed installation instructions, see README.md
  */

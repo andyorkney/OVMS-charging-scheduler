@@ -7,11 +7,12 @@ This guide explains how to set up clock event files on your OVMS module to enabl
 **The easiest way** is to use the JavaScript installer via the OVMS web interface:
 
 1. Upload `setup-events.js` to `/store/scripts/setup-events.js` (via Tools > Editor)
-2. Open Tools > Shell (or SSH) and run:
+2. Open Tools > Shell (or SSH)
+3. At the OVMS shell prompt, enter:
    ```
-   OVMS# script eval setup = require("setup-events"); setup.install();
+   script eval setup = require("setup-events"); setup.install();
    ```
-3. Done! 48 clock events created automatically
+4. Done! 48 clock events created automatically
 
 See the main README.md for complete installation instructions.
 
@@ -42,7 +43,7 @@ echo "Clock events created!"
 2. **Set your charging times via command** (no file editing needed!):
 
 ```
-OVMS# script eval charging.setSchedule(23, 30, 5, 30);
+script eval charging.setSchedule(23, 30, 5, 30);
 ```
 
 That's it! The system will automatically:
@@ -52,8 +53,8 @@ That's it! The system will automatically:
 
 **Change times anytime** without editing files:
 ```
-OVMS# script eval charging.setSchedule(22, 0, 6, 0);
-OVMS# script eval charging.getSchedule();
+script eval charging.setSchedule(22, 0, 6, 0);
+script eval charging.getSchedule();
 ```
 
 ---
