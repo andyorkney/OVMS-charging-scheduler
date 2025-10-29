@@ -230,12 +230,10 @@ function help() {
 // EXPORTS
 // ============================================================================
 
-exports = {
-    install: install,
-    uninstall: uninstall,
-    listEvents: listEvents,
-    help: help
-};
+exports.install = install;
+exports.uninstall = uninstall;
+exports.listEvents = listEvents;
+exports.help = help;
 
 print("OVMS Charging Event Installer loaded\n");
 print("Run: require('setup-events').install() to create 48 clock events\n");
