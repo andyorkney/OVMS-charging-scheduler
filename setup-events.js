@@ -8,16 +8,14 @@
  * 2. Create new file: /store/scripts/setup-events.js
  * 3. Copy this entire file content
  * 4. Save the file
- * 5. Go to Tools → Shell
- * 6. Run: script eval setup = require("setup-events");
- * 7. Run: setup.install();
- * 8. Wait for "Installation complete!" message
+ * 5. Go to Tools → Shell and run:
+ *    OVMS# script eval setup = require("setup-events"); setup.install();
+ * 6. Wait for "Installation complete!" message
  *
  * INSTALLATION VIA SSH:
  * 1. scp setup-events.js root@<your-ovms-ip>:/store/scripts/
  * 2. SSH to OVMS: ssh root@<your-ovms-ip>
- * 3. OVMS# script eval setup = require("setup-events");
- * 4. OVMS# script eval setup.install();
+ * 3. Run: OVMS# script eval setup = require("setup-events"); setup.install();
  *
  * VERIFICATION:
  * OVMS# vfs ls /store/events/
@@ -25,7 +23,7 @@
  *
  * REMOVAL:
  * If you want to uninstall:
- * OVMS# script eval setup.uninstall();
+ * OVMS# script eval setup = require("setup-events"); setup.uninstall();
  */
 
 // ============================================================================
@@ -233,7 +231,7 @@ exports = {
 };
 
 print("OVMS Charging Event Installer loaded\n");
-print("Run: setup.install() to create 48 clock events\n");
-print("Run: setup.help() for more information\n");
+print("Next: setup.install() to create 48 clock events\n");
+print("Help: setup.help() for more information\n");
 
 exports;
