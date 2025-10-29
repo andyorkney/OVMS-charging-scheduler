@@ -2,7 +2,7 @@
 
 Universal charging scheduler with intelligent timing and cost optimization for OVMS (Open Vehicle Monitoring System).
 
-## Quick Start (For OVMS Connect Users)
+## Quick Start 
 
 **Total time: ~5 minutes, no technical skills required!**
 
