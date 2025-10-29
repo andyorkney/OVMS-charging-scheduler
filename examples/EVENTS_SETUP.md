@@ -8,10 +8,9 @@ This guide explains how to set up clock event files on your OVMS module to enabl
 
 1. Upload `setup-events.js` to `/store/scripts/setup-events.js` (via Tools > Editor)
 2. Open Tools > Shell (or SSH)
-3. At the OVMS shell prompt, enter these commands:
+3. At the OVMS shell prompt, enter this command:
    ```
-   script eval setup = require("setup-events")
-   script eval setup.install()
+   script eval require("setup-events").install()
    ```
 4. Done! 48 clock events created automatically
 

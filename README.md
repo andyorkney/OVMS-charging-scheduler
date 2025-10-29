@@ -17,10 +17,9 @@ Universal charging scheduler with intelligent timing and cost optimisation for O
 
 3. **Run installer** in Tools > Shell (or via SSH):
 
-   At the OVMS shell prompt, enter these two commands:
+   At the OVMS shell prompt, enter this command:
    ```
-   script eval setup = require("setup-events")
-   script eval setup.install()
+   script eval require("setup-events").install()
    ```
 
    Wait for "Installation complete!" message
@@ -85,8 +84,7 @@ Choose ONE of these methods:
 
 2. Open **Tools > Shell** (or SSH) and run:
    ```
-   script eval setup = require("setup-events")
-   script eval setup.install()
+   script eval require("setup-events").install()
    ```
 
 3. Wait for "Installation complete!" message (creates 48 events automatically)
