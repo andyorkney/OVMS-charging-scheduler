@@ -874,7 +874,7 @@ PubSub.subscribe("usr.charge.stop", function(msg, data) {
 
 var __moduleLoadTime = Date.now() - __moduleLoadStart;
 print("OVMS Smart Charging v1.0 loaded (" + __moduleLoadTime + " ms)\n");
-print("Run: script eval \"charging.status()\" for full status\n");
+print('Run: script eval "charging.status()" for full status\n');
 
 // Return the exports object for module loading
 // (When using require(), this makes the module's functions available)

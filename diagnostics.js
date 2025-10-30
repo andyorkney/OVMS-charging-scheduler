@@ -200,8 +200,8 @@ exports.diagnoseTickerIssue = diagnoseTickerIssue;
 exports.runAll = runAll;
 
 print("OVMS Diagnostics loaded\n");
-print("Run: script eval \"diagnostics.runAll()\" for complete analysis\n");
+print('Run: script eval "diagnostics.runAll()" for complete analysis\n');
 print("Or run individual tests:\n");
-print("  - script eval \"diagnostics.checkLoadTime()\"\n");
-print("  - script eval \"diagnostics.profileChargingFunctions()\"\n");
-print("  - script eval \"diagnostics.diagnoseTickerIssue()\"\n");
+print('  - script eval "diagnostics.checkLoadTime()"\n');
+print('  - script eval "diagnostics.profileChargingFunctions()"\n');
+print('  - script eval "diagnostics.diagnoseTickerIssue()"\n');

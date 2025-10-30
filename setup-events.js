@@ -38,7 +38,7 @@
 function install() {
     print("\n=== OVMS Smart Charging Event Installer ===\n\n");
 
-    var eventContent = "script eval \"charging.checkSchedule()\"";
+    var eventContent = 'script eval "charging.checkSchedule()"';
     var created = 0;
     var errors = 0;
 
@@ -208,17 +208,17 @@ function help() {
     print("every 30 minutes (48 events total: 00:00, 00:30, 01:00, ..., 23:30)\n\n");
 
     print("Available commands:\n");
-    print("  script eval \"require('setup-events').install()\"     - Create all clock events\n");
-    print("  script eval \"require('setup-events').uninstall()\"   - Remove all clock events\n");
-    print("  script eval \"require('setup-events').listEvents()\"  - Show installed events\n");
-    print("  script eval \"require('setup-events').help()\"        - Show this help\n\n");
+    print('  script eval "require(\'setup-events\').install()"     - Create all clock events\n');
+    print('  script eval "require(\'setup-events\').uninstall()"   - Remove all clock events\n');
+    print('  script eval "require(\'setup-events\').listEvents()"  - Show installed events\n');
+    print('  script eval "require(\'setup-events\').help()"        - Show this help\n\n');
 
     print("Example workflow:\n");
-    print("  1. script eval \"require('setup-events').install()\"        # Create events\n");
-    print("  2. script eval \"charging.setSchedule(23, 30, 5, 30)\"      # Configure schedule\n");
-    print("  3. script eval \"charging.setLimits(80, 75)\"               # Set SOC targets\n");
-    print("  4. script eval \"charging.status()\"                        # Check status\n");
-    print("  5. script eval \"require('setup-events').listEvents()\"     # Verify installation\n\n");
+    print('  1. script eval "require(\'setup-events\').install()"        # Create events\n');
+    print('  2. script eval "charging.setSchedule(23, 30, 5, 30)"      # Configure schedule\n');
+    print('  3. script eval "charging.setLimits(80, 75)"               # Set SOC targets\n');
+    print('  4. script eval "charging.status()"                        # Check status\n');
+    print('  5. script eval "require(\'setup-events\').listEvents()"     # Verify installation\n\n');
 
     print("Need to modify frequency?\n");
     print("  - Every 15 minutes: Modify this script (change hours array)\n");
@@ -236,7 +236,7 @@ exports.listEvents = listEvents;
 exports.help = help;
 
 print("OVMS Charging Event Installer loaded\n");
-print("Run: script eval \"require('setup-events').install()\" to create 48 clock events\n");
-print("Help: script eval \"require('setup-events').help()\" for more information\n");
+print('Run: script eval "require(\'setup-events\').install()" to create 48 clock events\n');
+print('Help: script eval "require(\'setup-events\').help()" for more information\n');
 
 exports;
