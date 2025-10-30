@@ -46,8 +46,8 @@ check_file() {
     fi
 
     # Check 4: Look for unquoted examples in comments
-    # Lines with charging. or diagnostics. that look like examples but aren't quoted
-    if grep -n "^ \* .*\(charging\|diagnostics\|require\)\." "$file" | grep -v "script eval \"" | grep -v "script eval '"; then
+    # Lines with charging. or require. that look like examples but aren't quoted
+    if grep -n "^ \* .*\(charging\|require\)\." "$file" | grep -v "script eval \"" | grep -v "script eval '"; then
         echo "  [WARNING] Found function examples in comments without script eval wrapper"
         echo "    In documentation, should be: script eval \"function()\""
     fi
@@ -61,7 +61,7 @@ check_file() {
 }
 
 # Check all JavaScript files
-for file in charging.js setup-events.js diagnostics.js; do
+for file in charging.js setup-events.js; do
     if [ -f "$file" ]; then
         check_file "$file"
     else
