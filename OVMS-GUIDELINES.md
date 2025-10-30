@@ -96,9 +96,42 @@ Returns current schedule and charging status.
 
 ---
 
-## Testing Before Commit
+## Testing Before Commit (REQUIRED!)
 
-Test locally with Duktape:
+### Automated Validation
+
+**ALWAYS run the validation script before committing:**
+
+```bash
+./validate-ovms-syntax.sh
+```
+
+This script checks for:
+- ✅ JavaScript syntax errors (via Node.js)
+- ✅ Unquoted `script eval` commands in documentation
+- ✅ Escaped double quotes in double-quoted strings (Duktape incompatibility)
+- ✅ Function examples without proper OVMS CLI wrapper
+
+**The script will exit with an error if issues are found.**
+
+### Automated Pre-Commit Hook
+
+A git pre-commit hook is installed that automatically runs validation:
+
+```bash
+# Normal commit - runs validation automatically
+git commit -m "your message"
+
+# Skip validation (NOT recommended)
+git commit --no-verify -m "your message"
+```
+
+If the validation fails, fix the issues before committing!
+
+### Manual Testing (Optional)
+
+If you have Duktape installed locally:
+
 ```bash
 cd /path/to/project
 duk script-name.js
@@ -108,8 +141,22 @@ All code must pass Duktape validation without syntax errors.
 
 **Common Duktape errors to watch for:**
 - `SyntaxError: invalid object literal` → arrow functions or template literals
+- `SyntaxError: parse error (line X, end of input)` → escaped quotes in double-quoted strings
 - `ReferenceError: identifier 'let' undefined` → using let/const
 - `TypeError: undefined not callable` → modern methods that don't exist in ES5
+
+**Duktape String Escaping Issue:**
+Duktape has issues with escaped double quotes in double-quoted strings:
+```javascript
+// ❌ WRONG - Fails in Duktape
+print("Use: script eval \"function()\"");
+
+// ✅ CORRECT - Use single quotes for outer string
+print('Use: script eval "function()"');
+
+// ✅ CORRECT - If you need both quote types
+print('Use: script eval "require(\'module\').function()"');
+```
 
 ---
 
