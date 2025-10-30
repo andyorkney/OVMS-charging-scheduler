@@ -43,7 +43,7 @@ echo "Clock events created!"
 2. **Set your charging times via command** (no file editing needed!):
 
 ```
-script eval charging.setSchedule(23, 30, 5, 30)
+script eval charging.setSchedule(23,30,5,30)
 ```
 
 That's it! The system will automatically:
@@ -53,7 +53,7 @@ That's it! The system will automatically:
 
 **Change times anytime** without editing files:
 ```
-script eval charging.setSchedule(22, 0, 6, 0)
+script eval charging.setSchedule(22,0,6,0)
 script eval charging.getSchedule()
 ```
 
@@ -152,7 +152,7 @@ For dynamic start times based on "ready by" target:
 
 File: `/store/events/clock.0000/010-configure-charging`
 ```
-script eval charging.setReadyBy(7, 30)
+script eval charging.setReadyBy(7,30)
 ```
 
 **Start at calculated optimal time (still use fixed event as backup)**
@@ -181,7 +181,7 @@ This will send a notification showing when the next charge will occur.
 
 File: `/store/events/clock.0700/010-set-weekday-limits`
 ```
-script eval charging.setLimits(80, 75)
+script eval charging.setLimits(80,75)
 ```
 
 ## File Naming Convention
@@ -282,7 +282,7 @@ Optimize start time for 7:30 AM departure:
 
 ```bash
 # /store/events/clock.2200/010-configure-ready-by
-script eval charging.setReadyBy(7, 30)
+script eval charging.setReadyBy(7,30)
 
 # /store/events/clock.2330/010-start-if-needed
 script eval charging.start()
@@ -297,12 +297,12 @@ Different charging strategies for different rate periods:
 ```bash
 # Super cheap rate (01:00-05:00)
 # /store/events/clock.0100/010-cheap-rate-start
-script eval charging.setLimits(90, 85)
+script eval charging.setLimits(90,85)
 script eval charging.start()
 
 # Normal cheap rate (23:30-01:00)
 # /store/events/clock.2330/010-normal-rate-start
-script eval charging.setLimits(80, 75)
+script eval charging.setLimits(80,75)
 script eval charging.start()
 
 # Stop at rate change

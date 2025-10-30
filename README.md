@@ -2,7 +2,21 @@
 
 Universal charging scheduler with intelligent timing and cost optimisation for OVMS (Open Vehicle Monitoring System).
 
-## Quick Start 
+## 📱 Command Format - IMPORTANT!
+
+Commands in this guide use **app-friendly format** (works everywhere):
+```
+script eval charging.status()
+script eval charging.setSchedule(23,30,5,30)
+```
+
+**Why no quotes?** Mobile keyboards insert "smart quotes" (" ") which break commands. This format avoids the issue entirely.
+
+**For web console users:** You can optionally wrap in quotes if preferred: `script eval "charging.status()"`
+
+---
+
+## Quick Start
 
 **Total time: ~5 minutes, no technical skills required!**
 
@@ -19,22 +33,22 @@ Universal charging scheduler with intelligent timing and cost optimisation for O
 
    At the OVMS shell prompt, enter this command:
    ```
-   script eval "require('setup-events').install()"
+   script eval require('setup-events').install()
    ```
 
    Wait for "Installation complete!" message
 
 4. **Configure your schedule**:
    ```
-   script eval "charging.setSchedule(23, 30, 5, 30)"
-   script eval "charging.setLimits(80, 75)"
+   script eval charging.setSchedule(23,30,5,30)
+   script eval charging.setLimits(80,75)
    ```
 
 5. **Reload JavaScript** in Tools > Editor: Click "Reload JS Engine"
 
 Done! Check status with:
 ```
-script eval "charging.status()"
+script eval charging.status()
 ```
 
 ---
@@ -84,14 +98,14 @@ Choose ONE of these methods:
 
 2. Open **Tools > Shell** (or SSH) and run:
    ```
-   script eval "require('setup-events').install()"
+   script eval require('setup-events').install()
    ```
 
 3. Wait for "Installation complete!" message (creates 48 events automatically)
 
 4. Set your charging times:
    ```
-   script eval "charging.setSchedule(23, 30, 5, 30)"
+   script eval charging.setSchedule(23,30,5,30)
    ```
 
 #### Method B: SSH (For Advanced Users)
@@ -112,7 +126,7 @@ done
 
 Then set your charging times via command:
 ```
-script eval "charging.setSchedule(23, 30, 5, 30)"
+script eval charging.setSchedule(23,30,5,30)
 ```
 
 #### Method C: Manual Event Creation
@@ -122,7 +136,7 @@ script eval "charging.setSchedule(23, 30, 5, 30)"
 - Create file: `/store/events/clock.2330/010-start-charge`
 - Content:
   ```
-  script eval "charging.start()"
+  script eval charging.start()
   ```
 
 **Stop charging at 05:30** (5:30 AM):
@@ -130,7 +144,7 @@ script eval "charging.setSchedule(23, 30, 5, 30)"
 - Create file: `/store/events/clock.0530/010-stop-charge`
 - Content:
   ```
-  script eval "charging.stop()"
+  script eval charging.stop()
   ```
 
 ### 4. Reload JS Engine
@@ -150,17 +164,17 @@ script reload
 
 ```bash
 # Set charging schedule (start at 23:30, stop at 5:30)
-script eval "charging.setSchedule(23, 30, 5, 30)"
+script eval charging.setSchedule(23,30,5,30)
 
 # Set charger power rating
-script eval "charging.setChargeRate(7.0)"
+script eval charging.setChargeRate(7.0)
 
 # Set SOC targets
-script eval "charging.setLimits(80, 75)"
+script eval charging.setLimits(80,75)
 
 # View current settings
-script eval "charging.getSchedule()"
-script eval "charging.status()"
+script eval charging.getSchedule()
+script eval charging.status()
 ```
 
 **Advanced Method:** Edit the `config` object in `charging.js` for default values:
@@ -205,25 +219,25 @@ Connect to your OVMS module via SSH or web console, then use:
 
 ```
 // Information commands
-script eval "charging.status()"                   // Show complete status
-script eval "charging.nextCharge()"               // Quick view of next charge session
-script eval "charging.getSchedule()"              // Show current schedule times
+script eval charging.status()                   // Show complete status
+script eval charging.nextCharge()               // Quick view of next charge session
+script eval charging.getSchedule()              // Show current schedule times
 
 // Manual controls
-script eval "charging.start()"                    // Start charging now
-script eval "charging.stop()"                     // Stop charging now
+script eval charging.start()                    // Start charging now
+script eval charging.stop()                     // Stop charging now
 
 // Schedule configuration (NEW - user-friendly!)
-script eval "charging.setSchedule(23, 30, 5, 30)" // Set charging window (23:30 to 5:30)
+script eval charging.setSchedule(23,30,5,30)    // Set charging window (23:30 to 5:30)
 
 // Other configuration
-script eval "charging.setLimits(80, 75)"          // Set target SOC to 80%, skip if above 75%
-script eval "charging.setChargeRate(7.0)"         // Set charger to 7kW (Type 2 fast)
-script eval "charging.setReadyBy(7, 30)"          // Ready by 7:30 AM (intelligent scheduling)
-script eval "charging.clearReadyBy()"             // Return to fixed schedule
+script eval charging.setLimits(80,75)           // Set target SOC to 80%, skip if above 75%
+script eval charging.setChargeRate(7.0)         // Set charger to 7kW (Type 2 fast)
+script eval charging.setReadyBy(7,30)           // Ready by 7:30 AM (intelligent scheduling)
+script eval charging.clearReadyBy()             // Return to fixed schedule
 
 // Automation (called by clock events)
-script eval "charging.checkSchedule()"            // Check time and start/stop as needed
+script eval charging.checkSchedule()            // Check time and start/stop as needed
 ```
 
 ### Examples
@@ -243,11 +257,11 @@ Optimize charging to finish exactly when you need it:
 
 ```
 // Configure charger
-script eval "charging.setChargeRate(7.0)"        // 7kW Type 2 charger
-script eval "charging.setLimits(80, 75)"         // Target 80%, skip if above 75%
+script eval charging.setChargeRate(7.0)        // 7kW Type 2 charger
+script eval charging.setLimits(80,75)          // Target 80%, skip if above 75%
 
 // Set ready-by time
-script eval "charging.setReadyBy(7, 30)"         // Ready by 7:30 AM
+script eval charging.setReadyBy(7,30)          // Ready by 7:30 AM
 
 // The system will:
 // 1. Check current SOC
@@ -262,9 +276,9 @@ script eval "charging.setReadyBy(7, 30)"         // Ready by 7:30 AM
 For overnight charging with a standard outlet:
 
 ```
-script eval "charging.setChargeRate(1.8)"        // Granny charger
-script eval "charging.setLimits(90, 85)"         // Higher limits for slower charging
-script eval "charging.setReadyBy(8, 0)"          // Ready by 8:00 AM
+script eval charging.setChargeRate(1.8)        // Granny charger
+script eval charging.setLimits(90,85)          // Higher limits for slower charging
+script eval charging.setReadyBy(8,0)           // Ready by 8:00 AM
 ```
 
 #### Example 4: Rapid Charger
@@ -272,8 +286,8 @@ script eval "charging.setReadyBy(8, 0)"          // Ready by 8:00 AM
 For quick top-ups:
 
 ```
-script eval "charging.setChargeRate(50)"         // 50kW rapid charger
-script eval "charging.setLimits(80, 70)"         // Standard rapid charge limits
+script eval charging.setChargeRate(50)         // 50kW rapid charger
+script eval charging.setLimits(80,70)          // Standard rapid charge limits
 ```
 
 ### Status Output
@@ -370,7 +384,7 @@ config.batterySOH = 92;             // Specify exact SOH
 Verify charger rate matches your hardware:
 
 ```
-script eval "charging.setChargeRate(7.0)"  // Use your actual charger's kW rating
+script eval charging.setChargeRate(7.0)  // Use your actual charger's kW rating
 ```
 
 Check with multimeter or EVSE display if unsure.
@@ -388,16 +402,16 @@ If commands like `charging.status` show no output, you're missing the parenthese
 
 ```
 // WRONG - No output (just references the function)
-script eval "charging.status"
+script eval charging.status
 
 // CORRECT - Shows output (actually calls the function)
-script eval "charging.status()"
+script eval charging.status()
 ```
 
 **Remember:** All function calls need `()` to execute:
-- `script eval "charging.status()"` ✓
-- `script eval "charging.start()"` ✓
-- `script eval "charging.nextCharge()"` ✓
+- `script eval charging.status()` ✓
+- `script eval charging.start()` ✓
+- `script eval charging.nextCharge()` ✓
 
 ## Advanced Usage
 
@@ -408,15 +422,15 @@ Create different clock events for different scenarios:
 ```bash
 # Weekday schedule (earlier start)
 /store/events/clock.2200/010-weekday-charge
-  Content: script eval "charging.start()"
+  Content: script eval charging.start()
 
 # Weekend schedule (later start)
 /store/events/clock.0100/010-weekend-charge
-  Content: script eval "charging.start()"
+  Content: script eval charging.start()
 
 # Common stop time
 /store/events/clock.0630/010-stop-charge
-  Content: script eval "charging.stop()"
+  Content: script eval charging.stop()
 ```
 
 ### Integration with Home Automation

@@ -2,14 +2,17 @@
  * OVMSv3 Module - Smart Charging Script v1.0
  * Universal charging scheduler with intelligent timing and cost optimisation
  *
+ * COMMAND FORMAT NOTES:
+ * - Commands below work in OVMS Connect app (recommended for mobile/dashboard)
+ * - For OVMS web console/SSH: wrap commands in quotes if preferred
+ * - Mobile keyboards use "smart quotes" which break commands - use these formats to avoid issues
+ *
  * QUICK START:
  * 1. Upload charging.js to /store/scripts/lib/charging.js
  * 2. Upload setup-events.js to /store/scripts/setup-events.js
  * 3. Add to /store/scripts/ovmsmain.js: charging = require("lib/charging");
- * 4. At the OVMS shell prompt, run:
- *    script eval "require('setup-events').install()"
- * 5. Configure schedule:
- *    script eval "charging.setSchedule(23, 30, 5, 30)"
+ * 4. At the OVMS shell, run: script eval require('setup-events').install()
+ * 5. Configure schedule: script eval charging.setSchedule(23,30,5,30)
  * 6. Reload JS engine: Tools > Editor > "Reload JS Engine"
  *
  * See README.md for complete installation guide and troubleshooting
@@ -33,32 +36,32 @@
  * - Universal - works with any OVMS-supported EV
  *
  * USAGE - Information:
- * script eval "charging.status()"                  - Show complete status
- * script eval "charging.nextCharge()"              - Quick view of next charge session
- * script eval "charging.getSchedule()"             - Show current schedule times
+ * script eval charging.status()                  - Show complete status
+ * script eval charging.nextCharge()              - Quick view of next charge session
+ * script eval charging.getSchedule()             - Show current schedule times
  *
  * USAGE - Manual Control:
- * script eval "charging.start()"                   - Manual start
- * script eval "charging.stop()"                    - Manual stop
+ * script eval charging.start()                   - Manual start
+ * script eval charging.stop()                    - Manual stop
  *
  * USAGE - Configuration:
- * script eval "charging.setSchedule(23, 30, 5, 30)"   - Set start/stop times (23:30 to 5:30)
- * script eval "charging.setLimits(80, 75)"            - Set target and skip threshold
- * script eval "charging.setChargeRate(1.8)"           - Set your charger's kW rating
- * script eval "charging.setPricing(0.07, 0.28, '£')"  - Set cheap/expensive rates (optional currency)
- * script eval "charging.setReadyBy(7, 30)"            - Intelligent: ready by 7:30
- * script eval "charging.clearReadyBy()"               - Back to fixed schedule
+ * script eval charging.setSchedule(23,30,5,30)   - Set start/stop times (23:30 to 5:30)
+ * script eval charging.setLimits(80,75)          - Set target and skip threshold
+ * script eval charging.setChargeRate(1.8)        - Set your charger's kW rating
+ * script eval charging.setPricing(0.07,0.28)     - Set cheap/standard rates (currency optional)
+ * script eval charging.setReadyBy(7,30)          - Intelligent: ready by 7:30
+ * script eval charging.clearReadyBy()            - Back to fixed schedule
  *
  * USAGE - Automation:
- * script eval "charging.checkSchedule()"           - Check time and start/stop as needed
+ * script eval charging.checkSchedule()           - Check time and start/stop as needed
  *
  * SETUP:
  * Use the setup-events.js installer to create clock events automatically:
- *   script eval "require('setup-events').install()"
+ *   script eval require('setup-events').install()
  *
  * Then configure your schedule:
- *   script eval "charging.setSchedule(23, 30, 5, 30)"
- *   script eval "charging.setLimits(80, 75)"
+ *   script eval charging.setSchedule(23,30,5,30)
+ *   script eval charging.setLimits(80,75)
  *
  * For detailed installation instructions, see README.md
  */
@@ -92,7 +95,7 @@ var config = {
     // Electricity pricing (per kWh) - set via setPricing()
     pricing: {
         cheap: 0.07,        // Cheap rate (e.g., overnight) - £/$/€ per kWh
-        expensive: 0.28,    // Standard rate (peak/off-peak) - £/$/€ per kWh
+        standard: 0.28,     // Standard/daytime rate - £/$/€ per kWh
         currency: "£"       // Currency symbol for display
     },
 
@@ -206,7 +209,7 @@ exports.status = function() {
     msg += "  Cheap rate: " + pad(ws.hour) + ":" + pad(ws.minute) +
           " to " + pad(we.hour) + ":" + pad(we.minute) +
           " (" + config.pricing.currency + config.pricing.cheap.toFixed(2) + "/kWh)\n";
-    msg += "  Expensive rate: " + config.pricing.currency + config.pricing.expensive.toFixed(2) + "/kWh\n";
+    msg += "  Standard rate: " + config.pricing.currency + config.pricing.standard.toFixed(2) + "/kWh\n";
 
     if (config.readyBy) {
         msg += "  Mode: Ready By " + pad(config.readyBy.hour) + ":" + pad(config.readyBy.minute) + "\n";
@@ -228,13 +231,13 @@ exports.status = function() {
             if (!optimal.fitsInWindow && !optimal.emergency) {
                 msg += "\n  [WARNING] Charge time exceeds cheap window!\n";
                 if (optimal.overflowBefore > 0) {
-                    var costBefore = optimal.overflowBeforeKWh * config.pricing.expensive;
+                    var costBefore = optimal.overflowBeforeKWh * config.pricing.standard;
                     msg += "  - Before window: " + optimal.overflowBefore.toFixed(1) + "h, " +
                            optimal.overflowBeforeKWh.toFixed(1) + " kWh (" +
                            config.pricing.currency + costBefore.toFixed(2) + ")\n";
                 }
                 if (optimal.overflowAfter > 0) {
-                    var costAfter = optimal.overflowAfterKWh * config.pricing.expensive;
+                    var costAfter = optimal.overflowAfterKWh * config.pricing.standard;
                     msg += "  - After window: " + optimal.overflowAfter.toFixed(1) + "h, " +
                            optimal.overflowAfterKWh.toFixed(1) + " kWh (" +
                            config.pricing.currency + costAfter.toFixed(2) + ")\n";
@@ -421,21 +424,22 @@ exports.setChargeRate = function(rateKW) {
 
 /**
  * Set electricity pricing for cost calculations
+ * Currency parameter is optional - defaults to current setting
  */
-exports.setPricing = function(cheapRate, expensiveRate, currency) {
-    if (cheapRate < 0 || expensiveRate < 0) {
+exports.setPricing = function(cheapRate, standardRate, currency) {
+    if (cheapRate < 0 || standardRate < 0) {
         safeNotify("alert", "charge.config", "Invalid pricing rates");
         return;
     }
 
     config.pricing.cheap = cheapRate;
-    config.pricing.expensive = expensiveRate;
+    config.pricing.standard = standardRate;
     if (currency) {
         config.pricing.currency = currency;
     }
 
     var msg = "Pricing: " + config.pricing.currency + cheapRate + " cheap, " +
-              config.pricing.currency + expensiveRate + " expensive (per kWh)";
+              config.pricing.currency + standardRate + " standard (per kWh)";
     print(msg + "\n");
     safeNotify("info", "charge.config", msg);
 };
@@ -556,12 +560,12 @@ exports.checkSchedule = function() {
                 if (optimal.overflowBefore > 0) {
                     print("[INFO] Will charge " + optimal.overflowBeforeKWh.toFixed(1) +
                           " kWh BEFORE cheap window (extra cost: " + config.pricing.currency +
-                          (optimal.overflowBeforeKWh * config.pricing.expensive).toFixed(2) + ")\n");
+                          (optimal.overflowBeforeKWh * config.pricing.standard).toFixed(2) + ")\n");
                 }
                 if (optimal.overflowAfter > 0) {
                     print("[INFO] Will charge " + optimal.overflowAfterKWh.toFixed(1) +
                           " kWh AFTER cheap window (extra cost: " + config.pricing.currency +
-                          (optimal.overflowAfterKWh * config.pricing.expensive).toFixed(2) + ")\n");
+                          (optimal.overflowAfterKWh * config.pricing.standard).toFixed(2) + ")\n");
                 }
             }
         } else {
@@ -762,7 +766,7 @@ function calculateOptimalStart() {
 
         // Calculate total overflow cost
         var totalOverflowKWh = result.overflowBeforeKWh + result.overflowAfterKWh;
-        result.overflowCost = totalOverflowKWh * config.pricing.expensive;
+        result.overflowCost = totalOverflowKWh * config.pricing.standard;
     }
 
     result.hour = optimalStart.getHours();
@@ -874,7 +878,7 @@ PubSub.subscribe("usr.charge.stop", function(msg, data) {
 
 var __moduleLoadTime = Date.now() - __moduleLoadStart;
 print("OVMS Smart Charging v1.0 loaded (" + __moduleLoadTime + " ms)\n");
-print('Run: script eval "charging.status()" for full status\n');
+print('Run: script eval charging.status() for full status\n');
 
 // Return the exports object for module loading
 // (When using require(), this makes the module's functions available)
