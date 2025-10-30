@@ -67,7 +67,6 @@ Documentation should show:
 
 - `charging.js` - Main charging module
 - `setup-events.js` - Event installer
-- `diagnostics.js` - Diagnostic tools
 
 ## Common Issues and Fixes
 

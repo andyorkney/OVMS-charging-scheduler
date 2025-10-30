@@ -60,7 +60,6 @@ charging.status()       # Test it!
 ```bash
 # Just check syntax - quick and easy
 node -c charging.js
-node -c diagnostics.js
 node -c setup-events.js
 
 # All should report no errors
@@ -79,13 +78,10 @@ Via **OVMS Web Interface** (Tools > Editor):
 1. Create/edit: `/store/scripts/lib/charging.js`
    - Copy the content of `charging.js`
 
-2. Create/edit: `/store/scripts/diagnostics.js`
-   - Copy the content of `diagnostics.js`
-
-3. Create/edit: `/store/scripts/setup-events.js`
+2. Create/edit: `/store/scripts/setup-events.js`
    - Copy the content of `setup-events.js`
 
-4. Edit: `/store/scripts/ovmsmain.js`
+3. Edit: `/store/scripts/ovmsmain.js`
    - Add: `charging = require("lib/charging");`
 
 ### Step 2: Reload JavaScript Engine
@@ -113,10 +109,6 @@ script eval charging.status()
 script eval charging.setSchedule(23, 30, 5, 30)
 script eval charging.setLimits(80, 75)
 script eval charging.getSchedule()
-
-// Test diagnostics
-script eval diagnostics = require("diagnostics")
-script eval diagnostics.checkLoadTime()
 ```
 
 ### Step 4: Install Clock Events
@@ -168,7 +160,6 @@ Our code has been verified with:
 ```bash
 # Syntax validation
 node -c charging.js      # ✓ OK
-node -c diagnostics.js   # ✓ OK
 node -c setup-events.js  # ✓ OK
 
 # No Unicode issues (all replaced with ASCII)
@@ -196,8 +187,7 @@ Run this in your shell (not in duk):
 ```bash
 cd '/Volumes/Transcend 1TB/GitHub/OVMS-charging-scheduler'
 node -c charging.js && echo "✓ charging.js syntax OK"
-node -c diagnostics.js && echo "✓ diagnostics.js syntax OK"
 node -c setup-events.js && echo "✓ setup-events.js syntax OK"
 ```
 
-All three should report "syntax OK".
+Both should report "syntax OK".

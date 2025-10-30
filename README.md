@@ -448,9 +448,10 @@ All actions generate OVMS notifications that appear in the OVMS Connect mobile a
 /
 ├── charging.js           - Main charging module
 ├── setup-events.js       - Event installer (web editor friendly)
-├── diagnostics.js        - Performance diagnostic tools
 ├── README.md             - This file
-├── DIAGNOSTICS.md        - Troubleshooting guide
+├── TESTING.md            - Testing procedures
+├── VALIDATION-README.md  - Validation tools documentation
+├── OVMS-GUIDELINES.md    - Development guidelines
 └── examples/
     ├── EVENTS_SETUP.md   - Detailed event configuration guide
     ├── ovmsmain.js       - Example main script
