@@ -23,6 +23,9 @@
  * FEATURES:
  * - Auto-detects battery capacity and SOH from vehicle metrics
  * - Calculates optimal charge start time for "ready by" target
+ * - Smart overflow handling: starts early in cheap window for resilience
+ * - Cost calculation: warns about kWh charged outside cheap window
+ * - Emergency mode: always charges if deadline imminent (safety first!)
  * - Works with any charge rate (granny, Type 2, rapid)
  * - Prevents charging if SOC already sufficient
  * - Notifications for all actions (OVMS Connect app)
@@ -42,6 +45,7 @@
  * charging.setSchedule(23,30,5,30)   - Set start/stop times (23:30 to 5:30)
  * charging.setLimits(80,75)          - Set target and skip threshold
  * charging.setChargeRate(1.8)        - Set your charger's kW rating
+ * charging.setPricing(0.07,0.28,"£") - Set cheap/expensive rates (optional currency)
  * charging.setReadyBy(7,30)          - Intelligent: ready by 7:30
  * charging.clearReadyBy()            - Back to fixed schedule
  *
@@ -84,6 +88,13 @@ var config = {
 
     // Ready-by time (null = use fixed schedule)
     readyBy: null,          // Set via setReadyBy(hour, minute)
+
+    // Electricity pricing (per kWh) - set via setPricing()
+    pricing: {
+        cheap: 0.07,        // Cheap rate (e.g., overnight) - £/$/€ per kWh
+        expensive: 0.28,    // Standard rate (peak/off-peak) - £/$/€ per kWh
+        currency: "£"       // Currency symbol for display
+    },
 
     // Battery parameters (null = auto-detect from vehicle)
     batteryCapacityKWh: null,
@@ -193,14 +204,47 @@ exports.status = function() {
     var ws = config.cheapWindowStart;
     var we = config.cheapWindowEnd;
     msg += "  Cheap rate: " + pad(ws.hour) + ":" + pad(ws.minute) +
-          " to " + pad(we.hour) + ":" + pad(we.minute) + "\n";
+          " to " + pad(we.hour) + ":" + pad(we.minute) +
+          " (" + config.pricing.currency + config.pricing.cheap.toFixed(2) + "/kWh)\n";
+    msg += "  Expensive rate: " + config.pricing.currency + config.pricing.expensive.toFixed(2) + "/kWh\n";
 
     if (config.readyBy) {
         msg += "  Mode: Ready By " + pad(config.readyBy.hour) + ":" + pad(config.readyBy.minute) + "\n";
         var optimal = calculateOptimalStart();
         if (optimal) {
-            msg += "  Optimal start: " + pad(optimal.hour) + ":" + pad(optimal.minute) + "\n";
-            msg += "  Charge time: " + optimal.hoursNeeded.toFixed(1) + " hours\n";
+            msg += "  Start time: " + pad(optimal.hour) + ":" + pad(optimal.minute);
+            if (optimal.emergency) {
+                msg += " [EMERGENCY - START NOW!]\n";
+            } else if (optimal.startEarly) {
+                msg += " (early start, " + optimal.bufferHours.toFixed(1) + "h buffer)\n";
+            } else {
+                msg += "\n";
+            }
+
+            msg += "  Charge time: " + optimal.hoursNeeded.toFixed(1) + " hours";
+            msg += " (" + optimal.kWhNeeded.toFixed(1) + " kWh)\n";
+
+            // Show warnings for overflow
+            if (!optimal.fitsInWindow && !optimal.emergency) {
+                msg += "\n  [WARNING] Charge time exceeds cheap window!\n";
+                if (optimal.overflowBefore > 0) {
+                    var costBefore = optimal.overflowBeforeKWh * config.pricing.expensive;
+                    msg += "  - Before window: " + optimal.overflowBefore.toFixed(1) + "h, " +
+                           optimal.overflowBeforeKWh.toFixed(1) + " kWh (" +
+                           config.pricing.currency + costBefore.toFixed(2) + ")\n";
+                }
+                if (optimal.overflowAfter > 0) {
+                    var costAfter = optimal.overflowAfterKWh * config.pricing.expensive;
+                    msg += "  - After window: " + optimal.overflowAfter.toFixed(1) + "h, " +
+                           optimal.overflowAfterKWh.toFixed(1) + " kWh (" +
+                           config.pricing.currency + costAfter.toFixed(2) + ")\n";
+                }
+                msg += "  - Extra cost: " + config.pricing.currency + optimal.overflowCost.toFixed(2) + "\n";
+            } else if (optimal.emergency) {
+                msg += "\n  [EMERGENCY] Not enough time to reach target!\n";
+                msg += "  - Need " + optimal.hoursNeeded.toFixed(1) + "h but deadline is imminent\n";
+                msg += "  - Starting immediately to maximize charge\n";
+            }
         }
     } else {
         msg += "  Mode: Fixed schedule\n";
@@ -376,6 +420,27 @@ exports.setChargeRate = function(rateKW) {
 };
 
 /**
+ * Set electricity pricing for cost calculations
+ */
+exports.setPricing = function(cheapRate, expensiveRate, currency) {
+    if (cheapRate < 0 || expensiveRate < 0) {
+        safeNotify("alert", "charge.config", "Invalid pricing rates");
+        return;
+    }
+
+    config.pricing.cheap = cheapRate;
+    config.pricing.expensive = expensiveRate;
+    if (currency) {
+        config.pricing.currency = currency;
+    }
+
+    var msg = "Pricing: " + config.pricing.currency + cheapRate + " cheap, " +
+              config.pricing.currency + expensiveRate + " expensive (per kWh)";
+    print(msg + "\n");
+    safeNotify("info", "charge.config", msg);
+};
+
+/**
  * Set ready-by time for intelligent scheduling
  */
 exports.setReadyBy = function(hour, minute) {
@@ -474,9 +539,31 @@ exports.checkSchedule = function() {
         var optimal = calculateOptimalStart();
 
         if (optimal) {
-            // Use optimal start time (already constrained to cheap window)
+            // Check for EMERGENCY - need to start NOW
+            if (optimal.emergency && !charging && plugged && soc < config.skipIfAbove) {
+                print("[EMERGENCY] Not enough time to reach target! Starting immediately.\n");
+                print("  Need " + optimal.hoursNeeded.toFixed(1) + "h, deadline imminent\n");
+                exports.start();
+                return; // Exit early, emergency overrides all
+            }
+
+            // Use optimal start time (may be before/within/after window)
             startMinutes = optimal.hour * 60 + optimal.minute;
             startDesc = "optimal " + pad(optimal.hour) + ":" + pad(optimal.minute);
+
+            // Show overflow warnings when starting
+            if (!optimal.fitsInWindow && !charging) {
+                if (optimal.overflowBefore > 0) {
+                    print("[INFO] Will charge " + optimal.overflowBeforeKWh.toFixed(1) +
+                          " kWh BEFORE cheap window (extra cost: " + config.pricing.currency +
+                          (optimal.overflowBeforeKWh * config.pricing.expensive).toFixed(2) + ")\n");
+                }
+                if (optimal.overflowAfter > 0) {
+                    print("[INFO] Will charge " + optimal.overflowAfterKWh.toFixed(1) +
+                          " kWh AFTER cheap window (extra cost: " + config.pricing.currency +
+                          (optimal.overflowAfterKWh * config.pricing.expensive).toFixed(2) + ")\n");
+                }
+            }
         } else {
             // Can't calculate optimal (already charged enough?) - use window start
             startMinutes = config.cheapWindowStart.hour * 60 + config.cheapWindowStart.minute;
@@ -580,7 +667,8 @@ function scheduleStop() {
 }
 
 /**
- * Calculate optimal start time for ready-by target
+ * Calculate optimal start time for ready-by target with overflow detection
+ * Returns detailed info about charging schedule including cost overflows
  */
 function calculateOptimalStart() {
     if (!config.readyBy) return null;
@@ -595,32 +683,92 @@ function calculateOptimalStart() {
     var hoursNeeded = kWhNeeded / config.chargeRateKW;
     var minutesNeeded = Math.ceil(hoursNeeded * 60);
 
-    // Calculate start time working backwards from ready-by
     var now = new Date();
+
+    // Calculate ready-by time
     var readyByTime = new Date();
     readyByTime.setHours(config.readyBy.hour, config.readyBy.minute, 0, 0);
     if (readyByTime <= now) {
         readyByTime.setDate(readyByTime.getDate() + 1);
     }
 
-    var optimalStart = new Date(readyByTime.getTime() - (minutesNeeded * 60 * 1000));
-
-    // Constrain to cheap rate window
+    // Calculate cheap window times
     var windowStart = new Date();
     windowStart.setHours(config.cheapWindowStart.hour, config.cheapWindowStart.minute, 0, 0);
     if (windowStart <= now) {
         windowStart.setDate(windowStart.getDate() + 1);
     }
 
-    if (optimalStart < windowStart) {
-        optimalStart = windowStart; // Start at window beginning if need more time
+    var windowEnd = new Date();
+    windowEnd.setHours(config.cheapWindowEnd.hour, config.cheapWindowEnd.minute, 0, 0);
+    if (windowEnd <= windowStart) {
+        windowEnd.setDate(windowEnd.getDate() + 1); // Next day if overnight window
     }
 
-    return {
-        hour: optimalStart.getHours(),
-        minute: optimalStart.getMinutes(),
-        hoursNeeded: hoursNeeded
+    // Calculate cheap window duration in hours
+    var windowDurationMs = windowEnd.getTime() - windowStart.getTime();
+    var windowDurationHours = windowDurationMs / (1000 * 60 * 60);
+
+    // Calculate optimal start time (backward from ready-by)
+    var optimalStart = new Date(readyByTime.getTime() - (minutesNeeded * 60 * 1000));
+
+    var result = {
+        hour: 0,
+        minute: 0,
+        hoursNeeded: hoursNeeded,
+        kWhNeeded: kWhNeeded,
+        windowDurationHours: windowDurationHours,
+        fitsInWindow: hoursNeeded <= windowDurationHours,
+        overflowBefore: 0,
+        overflowAfter: 0,
+        overflowBeforeKWh: 0,
+        overflowAfterKWh: 0,
+        overflowCost: 0,
+        startEarly: false,
+        bufferHours: 0,
+        emergency: false
     };
+
+    // Check if optimal start is in the past (emergency!)
+    if (optimalStart <= now) {
+        result.emergency = true;
+        result.hour = now.getHours();
+        result.minute = now.getMinutes();
+        return result;
+    }
+
+    // LOGIC: If fits in cheap window, start early for resilience
+    if (result.fitsInWindow) {
+        // Start at window start time for maximum buffer
+        optimalStart = windowStart;
+        result.startEarly = true;
+        result.bufferHours = windowDurationHours - hoursNeeded;
+    } else {
+        // Doesn't fit - must use calculated optimal start
+        // Calculate overflow before window
+        if (optimalStart < windowStart) {
+            var overflowBeforeMs = windowStart.getTime() - optimalStart.getTime();
+            result.overflowBefore = overflowBeforeMs / (1000 * 60 * 60);
+            result.overflowBeforeKWh = result.overflowBefore * config.chargeRateKW;
+        }
+
+        // Calculate overflow after window
+        var chargeEnd = new Date(optimalStart.getTime() + (minutesNeeded * 60 * 1000));
+        if (chargeEnd > windowEnd) {
+            var overflowAfterMs = chargeEnd.getTime() - windowEnd.getTime();
+            result.overflowAfter = overflowAfterMs / (1000 * 60 * 60);
+            result.overflowAfterKWh = result.overflowAfter * config.chargeRateKW;
+        }
+
+        // Calculate total overflow cost
+        var totalOverflowKWh = result.overflowBeforeKWh + result.overflowAfterKWh;
+        result.overflowCost = totalOverflowKWh * config.pricing.expensive;
+    }
+
+    result.hour = optimalStart.getHours();
+    result.minute = optimalStart.getMinutes();
+
+    return result;
 }
 
 /**
