@@ -33,20 +33,20 @@ function checkLoadTime() {
         var endTime = Date.now();
         var loadTime = endTime - startTime;
 
-        print("✓ Charging module loaded in " + loadTime + " ms\n");
+        print("[OK] Charging module loaded in " + loadTime + " ms\n");
 
         if (loadTime > 1000) {
-            print("⚠ WARNING: Load time exceeds 1 second!\n");
+            print("[WARNING] Load time exceeds 1 second!\n");
         } else if (loadTime > 100) {
-            print("ℹ Load time is acceptable but could be optimized\n");
+            print("[INFO] Load time is acceptable but could be optimized\n");
         } else {
-            print("✓ Load time is excellent\n");
+            print("[OK] Load time is excellent\n");
         }
 
         print("\n");
         return loadTime;
     } catch (e) {
-        print("✗ Error loading charging module: " + e.message + "\n");
+        print("[ERROR] Error loading charging module: " + e.message + "\n");
         return -1;
     }
 }
@@ -107,14 +107,14 @@ function profileChargingFunctions() {
 
         var total = results.status + results.getSchedule + results.nextCharge;
         if (total > 500) {
-            print("⚠ WARNING: Functions are slow (total: " + total + " ms)\n");
+            print("[WARNING] Functions are slow (total: " + total + " ms)\n");
         } else {
-            print("✓ Functions execute quickly (total: " + total + " ms)\n");
+            print("[OK] Functions execute quickly (total: " + total + " ms)\n");
         }
 
         return results;
     } catch (e) {
-        print("✗ Error profiling functions: " + e.message + "\n");
+        print("[ERROR] Error profiling functions: " + e.message + "\n");
         return null;
     }
 }
@@ -192,13 +192,12 @@ function runAll() {
 // EXPORTS
 // ============================================================================
 
-exports = {
-    checkLoadTime: checkLoadTime,
-    listEventSubscriptions: listEventSubscriptions,
-    profileChargingFunctions: profileChargingFunctions,
-    diagnoseTickerIssue: diagnoseTickerIssue,
-    runAll: runAll
-};
+// Use proper exports pattern for OVMS Duktape compatibility
+exports.checkLoadTime = checkLoadTime;
+exports.listEventSubscriptions = listEventSubscriptions;
+exports.profileChargingFunctions = profileChargingFunctions;
+exports.diagnoseTickerIssue = diagnoseTickerIssue;
+exports.runAll = runAll;
 
 print("OVMS Diagnostics loaded\n");
 print("Run: diagnostics.runAll() for complete analysis\n");
@@ -206,5 +205,3 @@ print("Or run individual tests:\n");
 print("  - diagnostics.checkLoadTime()\n");
 print("  - diagnostics.profileChargingFunctions()\n");
 print("  - diagnostics.diagnoseTickerIssue()\n");
-
-exports;

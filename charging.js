@@ -461,36 +461,63 @@ exports.checkSchedule = function() {
     var now = new Date();
     var currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-    var ws = config.cheapWindowStart;
-    var we = config.cheapWindowEnd;
-    var startMinutes = ws.hour * 60 + ws.minute;
-    var stopMinutes = we.hour * 60 + we.minute;
-
     var charging = getSafeMetric("v.c.charging", false);
     var plugged = getSafeMetric("v.c.pilot", false);
+    var soc = getSafeMetric("v.b.soc", 0);
+
+    // Determine start and stop times based on mode
+    var startMinutes, stopMinutes;
+    var startDesc, stopDesc;
+
+    if (config.readyBy) {
+        // READY-BY MODE: Use calculated optimal start time
+        var optimal = calculateOptimalStart();
+
+        if (optimal) {
+            // Use optimal start time (already constrained to cheap window)
+            startMinutes = optimal.hour * 60 + optimal.minute;
+            startDesc = "optimal " + pad(optimal.hour) + ":" + pad(optimal.minute);
+        } else {
+            // Can't calculate optimal (already charged enough?) - use window start
+            startMinutes = config.cheapWindowStart.hour * 60 + config.cheapWindowStart.minute;
+            startDesc = "window " + pad(config.cheapWindowStart.hour) + ":" + pad(config.cheapWindowStart.minute);
+        }
+
+        // Stop at ready-by time
+        stopMinutes = config.readyBy.hour * 60 + config.readyBy.minute;
+        stopDesc = "ready-by " + pad(config.readyBy.hour) + ":" + pad(config.readyBy.minute);
+    } else {
+        // FIXED SCHEDULE MODE: Use window times directly
+        startMinutes = config.cheapWindowStart.hour * 60 + config.cheapWindowStart.minute;
+        stopMinutes = config.cheapWindowEnd.hour * 60 + config.cheapWindowEnd.minute;
+        startDesc = pad(config.cheapWindowStart.hour) + ":" + pad(config.cheapWindowStart.minute);
+        stopDesc = pad(config.cheapWindowEnd.hour) + ":" + pad(config.cheapWindowEnd.minute);
+    }
 
     // Handle overnight schedules (e.g., 23:30 to 05:30)
     var inWindow = false;
     if (startMinutes > stopMinutes) {
-        // Overnight: 23:30 to 05:30
+        // Overnight: start time is before midnight, stop time is after midnight
         inWindow = (currentMinutes >= startMinutes || currentMinutes < stopMinutes);
     } else {
-        // Same day: 10:00 to 14:00
+        // Same day: start and stop within same day
         inWindow = (currentMinutes >= startMinutes && currentMinutes < stopMinutes);
     }
 
     // Decide what to do
     if (inWindow && !charging && plugged) {
         // In charging window, plugged in, not charging - try to start
-        var soc = getSafeMetric("v.b.soc", 0);
         if (soc < config.skipIfAbove) {
-            print("Auto-start: In charging window (" + pad(ws.hour) + ":" + pad(ws.minute) +
-                  " to " + pad(we.hour) + ":" + pad(we.minute) + ")\n");
+            print("Auto-start: In window (" + startDesc + " to " + stopDesc +
+                  "), SOC " + soc.toFixed(0) + "% < " + config.skipIfAbove + "%\n");
             exports.start();
+        } else {
+            print("Skip: SOC " + soc.toFixed(0) + "% >= " + config.skipIfAbove +
+                  "% (already charged enough)\n");
         }
     } else if (!inWindow && charging) {
         // Outside charging window but still charging - stop
-        print("Auto-stop: Outside charging window\n");
+        print("Auto-stop: Outside charging window (after " + stopDesc + ")\n");
         exports.stop();
     }
 };

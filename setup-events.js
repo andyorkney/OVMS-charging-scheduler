@@ -66,11 +66,11 @@ function install() {
                 });
 
                 created++;
-                print("✓ Created: " + dirName + "/charging-check\n");
+                print("[OK] Created: " + dirName + "/charging-check\n");
 
             } catch (e) {
                 errors++;
-                print("✗ Error creating " + dirName + ": " + e.message + "\n");
+                print("[ERROR] Error creating " + dirName + ": " + e.message + "\n");
             }
         }
     }
@@ -80,14 +80,14 @@ function install() {
     print("Errors: " + errors + "\n\n");
 
     if (errors === 0) {
-        print("✓ Installation complete!\n\n");
+        print("[OK] Installation complete!\n\n");
         print("Your charging module will now check the schedule every 30 minutes.\n");
         print("Next steps:\n");
         print("  1. Configure your schedule: charging.setSchedule(23, 30, 5, 30)\n");
         print("  2. Set charge limits: charging.setLimits(80, 75)\n");
         print("  3. Check status: charging.status()\n\n");
     } else {
-        print("⚠ Installation completed with errors.\n");
+        print("[WARNING] Installation completed with errors.\n");
         print("Some events may not have been created.\n");
         print("You can try running the install command again.\n\n");
     }
@@ -98,7 +98,7 @@ function install() {
  */
 function uninstall() {
     print("\n=== OVMS Smart Charging Event Uninstaller ===\n\n");
-    print("⚠ WARNING: This will remove all charging-check event files!\n");
+    print("[WARNING] This will remove all charging-check event files!\n");
     print("Proceeding with removal...\n\n");
 
     var removed = 0;
@@ -125,14 +125,14 @@ function uninstall() {
                     result.indexOf("not found") === -1 &&
                     result.indexOf("No such") === -1) {
                     errors++;
-                    print("✗ Error removing " + dirName + ": " + result + "\n");
+                    print("[ERROR] Error removing " + dirName + ": " + result + "\n");
                 } else {
                     removed++;
-                    print("✓ Removed: " + dirName + "/charging-check\n");
+                    print("[OK] Removed: " + dirName + "/charging-check\n");
                 }
             } catch (e) {
                 errors++;
-                print("✗ Error removing " + dirName + ": " + e.message + "\n");
+                print("[ERROR] Error removing " + dirName + ": " + e.message + "\n");
             }
 
             // Note: We don't remove the directories themselves as they might contain
@@ -145,11 +145,11 @@ function uninstall() {
     print("Errors: " + errors + "\n\n");
 
     if (errors === 0) {
-        print("✓ Uninstallation complete!\n");
+        print("[OK] Uninstallation complete!\n");
         print("Note: Empty clock.HHMM directories were left in place.\n");
         print("They won't cause any issues, but you can remove them manually if desired.\n\n");
     } else {
-        print("⚠ Uninstallation completed with errors.\n\n");
+        print("[WARNING] Uninstallation completed with errors.\n\n");
     }
 }
 
@@ -181,7 +181,7 @@ function listEvents() {
 
                 // Format time nicely (e.g., 00:00, 01:30, 23:30)
                 var timeStr = hourStr + ":" + minStr;
-                print("✓ " + timeStr + " - " + dirName + "/charging-check\n");
+                print("[OK] " + timeStr + " - " + dirName + "/charging-check\n");
             }
         }
     }
@@ -189,11 +189,11 @@ function listEvents() {
     print("\nTotal events found: " + found + " / 48\n");
 
     if (found === 0) {
-        print("\n⚠ No events installed. Run the install command to create them.\n");
+        print("\n[WARNING] No events installed. Run the install command to create them.\n");
     } else if (found < 48) {
-        print("\n⚠ Some events are missing. Run the install command to create them.\n");
+        print("\n[WARNING] Some events are missing. Run the install command to create them.\n");
     } else {
-        print("\n✓ All events are installed correctly!\n");
+        print("\n[OK] All events are installed correctly!\n");
     }
 
     print("\n");
