@@ -7,9 +7,9 @@
  * 2. Upload setup-events.js to /store/scripts/setup-events.js
  * 3. Add to /store/scripts/ovmsmain.js: charging = require("lib/charging");
  * 4. At the OVMS shell prompt, run:
- *    script eval require("setup-events").install()
+ *    script eval "require('setup-events').install()"
  * 5. Configure schedule:
- *    script eval charging.setSchedule(23, 30, 5, 30)
+ *    script eval "charging.setSchedule(23, 30, 5, 30)"
  * 6. Reload JS engine: Tools > Editor > "Reload JS Engine"
  *
  * See README.md for complete installation guide and troubleshooting
@@ -33,32 +33,32 @@
  * - Universal - works with any OVMS-supported EV
  *
  * USAGE - Information:
- * charging.status()                  - Show complete status
- * charging.nextCharge()              - Quick view of next charge session
- * charging.getSchedule()             - Show current schedule times
+ * script eval "charging.status()"                  - Show complete status
+ * script eval "charging.nextCharge()"              - Quick view of next charge session
+ * script eval "charging.getSchedule()"             - Show current schedule times
  *
  * USAGE - Manual Control:
- * charging.start()                   - Manual start
- * charging.stop()                    - Manual stop
+ * script eval "charging.start()"                   - Manual start
+ * script eval "charging.stop()"                    - Manual stop
  *
  * USAGE - Configuration:
- * charging.setSchedule(23,30,5,30)   - Set start/stop times (23:30 to 5:30)
- * charging.setLimits(80,75)          - Set target and skip threshold
- * charging.setChargeRate(1.8)        - Set your charger's kW rating
- * charging.setPricing(0.07,0.28,"£") - Set cheap/expensive rates (optional currency)
- * charging.setReadyBy(7,30)          - Intelligent: ready by 7:30
- * charging.clearReadyBy()            - Back to fixed schedule
+ * script eval "charging.setSchedule(23, 30, 5, 30)"   - Set start/stop times (23:30 to 5:30)
+ * script eval "charging.setLimits(80, 75)"            - Set target and skip threshold
+ * script eval "charging.setChargeRate(1.8)"           - Set your charger's kW rating
+ * script eval "charging.setPricing(0.07, 0.28, '£')"  - Set cheap/expensive rates (optional currency)
+ * script eval "charging.setReadyBy(7, 30)"            - Intelligent: ready by 7:30
+ * script eval "charging.clearReadyBy()"               - Back to fixed schedule
  *
  * USAGE - Automation:
- * charging.checkSchedule()           - Check time and start/stop as needed
+ * script eval "charging.checkSchedule()"           - Check time and start/stop as needed
  *
  * SETUP:
  * Use the setup-events.js installer to create clock events automatically:
- *   script eval require("setup-events").install()
+ *   script eval "require('setup-events').install()"
  *
  * Then configure your schedule:
- *   script eval charging.setSchedule(23, 30, 5, 30)
- *   script eval charging.setLimits(80, 75)
+ *   script eval "charging.setSchedule(23, 30, 5, 30)"
+ *   script eval "charging.setLimits(80, 75)"
  *
  * For detailed installation instructions, see README.md
  */
@@ -874,7 +874,7 @@ PubSub.subscribe("usr.charge.stop", function(msg, data) {
 
 var __moduleLoadTime = Date.now() - __moduleLoadStart;
 print("OVMS Smart Charging v1.0 loaded (" + __moduleLoadTime + " ms)\n");
-print("Type 'charging.status()' for full status\n");
+print("Run: script eval \"charging.status()\" for full status\n");
 
 // Return the exports object for module loading
 // (When using require(), this makes the module's functions available)

@@ -8,9 +8,9 @@
  *
  * Usage:
  *   1. Copy to /store/scripts/diagnostics.js on OVMS
- *   2. Run: script eval diagnostics = require("diagnostics");
- *   3. Run: diagnostics.checkLoadTime();
- *   4. Run: diagnostics.listEventSubscriptions();
+ *   2. Run: script eval "diagnostics = require('diagnostics')"
+ *   3. Run: script eval "diagnostics.checkLoadTime()"
+ *   4. Run: script eval "diagnostics.listEventSubscriptions()"
  */
 
 // ============================================================================
@@ -200,8 +200,8 @@ exports.diagnoseTickerIssue = diagnoseTickerIssue;
 exports.runAll = runAll;
 
 print("OVMS Diagnostics loaded\n");
-print("Run: diagnostics.runAll() for complete analysis\n");
+print("Run: script eval \"diagnostics.runAll()\" for complete analysis\n");
 print("Or run individual tests:\n");
-print("  - diagnostics.checkLoadTime()\n");
-print("  - diagnostics.profileChargingFunctions()\n");
-print("  - diagnostics.diagnoseTickerIssue()\n");
+print("  - script eval \"diagnostics.checkLoadTime()\"\n");
+print("  - script eval \"diagnostics.profileChargingFunctions()\"\n");
+print("  - script eval \"diagnostics.diagnoseTickerIssue()\"\n");
