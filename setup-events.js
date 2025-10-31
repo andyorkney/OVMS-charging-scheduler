@@ -39,6 +39,8 @@
 
 /**
  * Install clock events for automatic charging schedule checks
+ * Creates up to 10 files per run to avoid overwhelming the system
+ * Run multiple times until all 48 files are created
  */
 function install() {
     print("\n=== OVMS Smart Charging Event Installer ===\n\n");
@@ -47,9 +49,10 @@ function install() {
     var created = 0;
     var skipped = 0;
     var errors = 0;
+    var MAX_PER_RUN = 10;  // Limit to 10 files per run to avoid system strain
 
-    print("Creating JavaScript event files for every 30 minutes (48 total)...\n");
-    print("This may take a moment to avoid file descriptor exhaustion...\n\n");
+    print("Creating up to " + MAX_PER_RUN + " event files this run...\n");
+    print("Run again if needed to create remaining files.\n\n");
 
     // Create events for every 30 minutes (00 and 30 minutes of each hour)
     for (var hour = 0; hour < 24; hour++) {
@@ -57,6 +60,11 @@ function install() {
 
         for (var i = 0; i < hours.length; i++) {
             var minute = hours[i];
+
+            // Stop after creating MAX_PER_RUN files
+            if (created >= MAX_PER_RUN) {
+                break;
+            }
 
             // Format: clock.HHMM (e.g., clock.0000, clock.0030, clock.0100)
             var hourStr = (hour < 10) ? "0" + hour : "" + hour;
@@ -77,7 +85,6 @@ function install() {
 
                 if (exists) {
                     skipped++;
-                    // Don't print for each skip - too verbose
                     continue;
                 }
 
@@ -93,17 +100,15 @@ function install() {
                 created++;
                 print("[OK] Created: " + dirName + "/charging-check.js\n");
 
-                // Delay after EVERY file creation to prevent file descriptor exhaustion
-                // Sleep for 100ms to let VFS close file handles
-                var start = Date.now();
-                while (Date.now() - start < 100) {
-                    // Busy wait for 100ms
-                }
-
             } catch (e) {
                 errors++;
                 print("[ERROR] Error creating " + dirName + ": " + e.message + "\n");
             }
+        }
+
+        // Break outer loop too if we hit the limit
+        if (created >= MAX_PER_RUN) {
+            break;
         }
     }
 
