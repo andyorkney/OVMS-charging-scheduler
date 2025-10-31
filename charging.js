@@ -192,7 +192,7 @@ function getBatteryParams() {
 exports.status = function() {
     // Build status message
     var msg = "=== OVMS Smart Charging Status ===\n";
-    msg += "Time: " + new Date().toISOString() + "\n\n";
+    msg += "Time: " + new Date().toString() + "\n\n";
 
     // Battery information
     var battery = getBatteryParams();
