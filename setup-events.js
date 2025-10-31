@@ -45,6 +45,7 @@ function install() {
 
     var eventContent = 'charging.checkSchedule();';
     var created = 0;
+    var skipped = 0;
     var errors = 0;
 
     print("Creating JavaScript event files for every 30 minutes (48 total)...\n");
@@ -65,6 +66,21 @@ function install() {
             var filePath = dirPath + "/charging-check.js";
 
             try {
+                // Check if file already exists
+                var exists = false;
+                try {
+                    VFS.Open(filePath);
+                    exists = true;
+                } catch (e) {
+                    exists = false;
+                }
+
+                if (exists) {
+                    skipped++;
+                    // Don't print for each skip - too verbose
+                    continue;
+                }
+
                 // VFS.Save automatically creates missing directories
                 VFS.Save({
                     path: filePath,
@@ -74,10 +90,11 @@ function install() {
                 created++;
                 print("[OK] Created: " + dirName + "/charging-check.js\n");
 
-                // Small delay to prevent VFS file descriptor exhaustion
-                // Every 6 files, pause briefly to let file handles close
-                if (created % 6 === 0) {
-                    OvmsCommand.Exec("script eval 1");  // Brief pause
+                // Delay after EVERY file creation to prevent file descriptor exhaustion
+                // Sleep for 100ms to let VFS close file handles
+                var start = Date.now();
+                while (Date.now() - start < 100) {
+                    // Busy wait for 100ms
                 }
 
             } catch (e) {
@@ -89,19 +106,21 @@ function install() {
 
     print("\n=== Installation Summary ===\n");
     print("Events created: " + created + "\n");
+    print("Already existed: " + skipped + "\n");
     print("Errors: " + errors + "\n\n");
 
-    if (errors === 0 && created === 48) {
+    var total = created + skipped;
+    if (total === 48 && errors === 0) {
         print("[OK] Installation complete!\n\n");
         print("Your charging module will now check the schedule every 30 minutes.\n");
         print("Next steps:\n");
         print("  1. Configure your schedule: charging.setSchedule(23,30,5,30)\n");
         print("  2. Set charge limits: charging.setLimits(80,75)\n");
         print("  3. Check status: charging.status()\n\n");
-    } else if (created > 0 && created < 48) {
-        print("[WARNING] Partial installation - only " + created + " of 48 files created.\n");
-        print("This may be due to VFS file descriptor exhaustion.\n");
-        print("Run the install command again to create the missing files.\n\n");
+    } else if (total < 48) {
+        print("[WARNING] Partial installation - " + total + " of 48 files exist.\n");
+        print("Created " + created + " new files this run.\n");
+        print("Run the install command again to create the remaining " + (48 - total) + " files.\n\n");
     } else if (errors > 0) {
         print("[WARNING] Installation completed with errors.\n");
         print("Some events may not have been created.\n");
