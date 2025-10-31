@@ -109,6 +109,7 @@ function uninstall() {
 
     var removed = 0;
     var errors = 0;
+    var notFound = 0;
 
     // Remove events for every 30 minutes
     for (var hour = 0; hour < 24; hour++) {
@@ -131,43 +132,54 @@ function uninstall() {
                 var filePath = filePaths[j];
 
                 try {
-                    // Remove event file using vfs command
-                    var result = OvmsCommand.Exec("vfs rm " + filePath);
+                    // First check if file exists using vfs stat
+                    var statResult = OvmsCommand.Exec("vfs stat " + filePath);
 
-                    // Check if command succeeded (file not found is okay)
-                    if (result && result.indexOf("Error") !== -1 &&
-                        result.indexOf("not found") === -1 &&
-                        result.indexOf("No such") === -1) {
+                    // If stat shows error or not found, skip this file
+                    if (!statResult || statResult.indexOf("Error") !== -1 ||
+                        statResult.indexOf("not found") !== -1 ||
+                        statResult.indexOf("No such") !== -1) {
+                        notFound++;
+                        continue; // File doesn't exist, skip to next
+                    }
+
+                    // File exists, try to remove it
+                    var rmResult = OvmsCommand.Exec("vfs rm " + filePath);
+
+                    // Check if removal succeeded
+                    if (rmResult && rmResult.indexOf("Error") !== -1) {
                         errors++;
-                        print("[ERROR] Error removing " + filePath + ": " + result + "\n");
-                    } else if (result && (result.indexOf("not found") === -1 && result.indexOf("No such") === -1)) {
+                        print("[ERROR] Failed to remove " + filePath + "\n");
+                        print("        Error: " + rmResult + "\n");
+                    } else {
                         removed++;
                         print("[OK] Removed: " + filePath + "\n");
                     }
                 } catch (e) {
-                    // Only report error if it's not a "file not found" error
-                    if (e.message.indexOf("not found") === -1 && e.message.indexOf("No such") === -1) {
-                        errors++;
-                        print("[ERROR] Error removing " + filePath + ": " + e.message + "\n");
-                    }
+                    errors++;
+                    print("[ERROR] Exception removing " + filePath + ": " + e.message + "\n");
                 }
             }
-
-            // Note: We don't remove the directories themselves as they might contain
-            // other event files. Use "vfs rmdir /store/events/clock.HHMM" manually if needed.
         }
     }
 
     print("\n=== Uninstallation Summary ===\n");
     print("Events removed: " + removed + "\n");
+    print("Not found: " + notFound + "\n");
     print("Errors: " + errors + "\n\n");
 
-    if (errors === 0) {
+    if (errors === 0 && removed > 0) {
         print("[OK] Uninstallation complete!\n");
         print("Note: Empty clock.HHMM directories were left in place.\n");
         print("They won't cause any issues, but you can remove them manually if desired.\n\n");
+    } else if (removed === 0 && errors === 0) {
+        print("[INFO] No event files found to remove.\n");
+        print("The events may have already been uninstalled.\n\n");
     } else {
-        print("[WARNING] Uninstallation completed with errors.\n\n");
+        print("[WARNING] Uninstallation completed with errors.\n");
+        print("Some files may not have been removed. You can try removing them manually:\n");
+        print("  vfs rm /store/events/clock.HHMM/charging-check\n");
+        print("  vfs rm /store/events/clock.HHMM/charging-check.js\n\n");
     }
 }
 
