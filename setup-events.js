@@ -49,10 +49,10 @@ function install() {
     var created = 0;
     var skipped = 0;
     var errors = 0;
-    var MAX_PER_RUN = 10;  // Limit to 10 files per run to avoid system strain
+    var MAX_PER_RUN = 5;  // Limit to 5 files per run to avoid system strain
 
-    print("Creating up to " + MAX_PER_RUN + " event files this run...\n");
-    print("Run again if needed to create remaining files.\n\n");
+    print("BATCHED MODE: Creating max " + MAX_PER_RUN + " files per run.\n");
+    print("This prevents system overload. Run multiple times to complete.\n\n");
 
     // Create events for every 30 minutes (00 and 30 minutes of each hour)
     for (var hour = 0; hour < 24; hour++) {
@@ -134,6 +134,8 @@ function install() {
         print("Some events may not have been created.\n");
         print("You can try running the install command again.\n\n");
     }
+
+    return true;  // Explicit return to suppress "undefined" in REPL
 }
 
 /**
