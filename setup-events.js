@@ -1,7 +1,8 @@
 /**
  * OVMS Smart Charging - Event Installer
  *
- * This script creates 48 clock events (every 30 minutes) that check the charging schedule.
+ * This script creates 48 JavaScript event files (.js) that check the charging schedule.
+ * Event files contain direct JavaScript code (no 'script eval' wrapper needed).
  *
  * COMMAND FORMAT NOTE:
  * Commands use app-friendly format (no quotes, no spaces after commas)
@@ -42,11 +43,11 @@
 function install() {
     print("\n=== OVMS Smart Charging Event Installer ===\n\n");
 
-    var eventContent = 'script eval charging.checkSchedule()';
+    var eventContent = 'charging.checkSchedule();';
     var created = 0;
     var errors = 0;
 
-    print("Creating clock events for every 30 minutes (48 total)...\n\n");
+    print("Creating JavaScript event files for every 30 minutes (48 total)...\n\n");
 
     // Create events for every 30 minutes (00 and 30 minutes of each hour)
     for (var hour = 0; hour < 24; hour++) {
@@ -60,7 +61,7 @@ function install() {
             var minStr = (minute < 10) ? "0" + minute : "" + minute;
             var dirName = "clock." + hourStr + minStr;
             var dirPath = "/store/events/" + dirName;
-            var filePath = dirPath + "/charging-check";
+            var filePath = dirPath + "/charging-check.js";
 
             try {
                 // VFS.Save automatically creates missing directories
@@ -70,7 +71,7 @@ function install() {
                 });
 
                 created++;
-                print("[OK] Created: " + dirName + "/charging-check\n");
+                print("[OK] Created: " + dirName + "/charging-check.js\n");
 
             } catch (e) {
                 errors++;
@@ -102,7 +103,7 @@ function install() {
  */
 function uninstall() {
     print("\n=== OVMS Smart Charging Event Uninstaller ===\n\n");
-    print("[WARNING] This will remove all charging-check event files!\n");
+    print("[WARNING] This will remove all charging-check.js event files!\n");
     print("Proceeding with removal...\n\n");
 
     var removed = 0;
@@ -118,7 +119,7 @@ function uninstall() {
             var hourStr = (hour < 10) ? "0" + hour : "" + hour;
             var minStr = (minute < 10) ? "0" + minute : "" + minute;
             var dirName = "clock." + hourStr + minStr;
-            var filePath = "/store/events/" + dirName + "/charging-check";
+            var filePath = "/store/events/" + dirName + "/charging-check.js";
 
             try {
                 // Remove event file using vfs command
@@ -132,7 +133,7 @@ function uninstall() {
                     print("[ERROR] Error removing " + dirName + ": " + result + "\n");
                 } else {
                     removed++;
-                    print("[OK] Removed: " + dirName + "/charging-check\n");
+                    print("[OK] Removed: " + dirName + "/charging-check.js\n");
                 }
             } catch (e) {
                 errors++;
@@ -174,7 +175,7 @@ function listEvents() {
             var hourStr = (hour < 10) ? "0" + hour : "" + hour;
             var minStr = (minute < 10) ? "0" + minute : "" + minute;
             var dirName = "clock." + hourStr + minStr;
-            var filePath = "/store/events/" + dirName + "/charging-check";
+            var filePath = "/store/events/" + dirName + "/charging-check.js";
 
             // Check if file exists using vfs stat command
             var result = OvmsCommand.Exec("vfs stat " + filePath);
@@ -185,7 +186,7 @@ function listEvents() {
 
                 // Format time nicely (e.g., 00:00, 01:30, 23:30)
                 var timeStr = hourStr + ":" + minStr;
-                print("[OK] " + timeStr + " - " + dirName + "/charging-check\n");
+                print("[OK] " + timeStr + " - " + dirName + "/charging-check.js\n");
             }
         }
     }
