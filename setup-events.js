@@ -235,6 +235,11 @@ function help() {
 // EXPORTS
 // ============================================================================
 
+// Ensure exports object exists (for OVMS compatibility)
+if (typeof exports === 'undefined') {
+    var exports = {};
+}
+
 exports.install = install;
 exports.uninstall = uninstall;
 exports.listEvents = listEvents;
