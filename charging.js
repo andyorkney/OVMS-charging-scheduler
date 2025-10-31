@@ -292,8 +292,32 @@ exports.nextCharge = function() {
     var stopTime = calculateStopTime(nextStart);
     var soc = getSafeMetric("v.b.soc", 0);
 
-    var msg = "Next: " + formatTime(nextStart) + " to " + formatTime(stopTime) +
-              ", SOC " + soc.toFixed(0) + "% to " + config.targetSOC + "%";
+    // Calculate charge details
+    var battery = getBatteryParams();
+    var socNeeded = config.targetSOC - soc;
+    var kWhNeeded = (socNeeded / 100) * battery.usable;
+    var hoursNeeded = kWhNeeded / config.chargeRateKW;
+    var costCheap = kWhNeeded * config.pricing.cheap;
+
+    var msg = "Next: " + formatTime(nextStart) + " to " + formatTime(stopTime) + "\n";
+    msg += "SOC " + soc.toFixed(0) + "% → " + config.targetSOC + "%";
+
+    if (socNeeded > 0) {
+        msg += " (" + hoursNeeded.toFixed(1) + "h, " + kWhNeeded.toFixed(1) + " kWh)\n";
+
+        // Check for overflow
+        var optimal = calculateOptimalStart();
+        if (optimal && !optimal.fitsInWindow) {
+            var totalCost = costCheap + optimal.overflowCost;
+            msg += "Cost: " + config.pricing.currency + totalCost.toFixed(2);
+            if (optimal.overflowCost > 0) {
+                msg += " (" + config.pricing.currency + costCheap.toFixed(2) + " cheap + " +
+                       config.pricing.currency + optimal.overflowCost.toFixed(2) + " overflow)";
+            }
+        } else {
+            msg += "Cost: " + config.pricing.currency + costCheap.toFixed(2) + " (cheap rate)";
+        }
+    }
 
     print(msg + "\n");
     safeNotify("info", "charge.schedule", msg);
@@ -320,6 +344,13 @@ exports.start = function() {
     var soc = getSafeMetric("v.b.soc", 0);
     print("Current SOC: " + soc.toFixed(0) + "%\n");
 
+    // Calculate charge details for notification
+    var battery = getBatteryParams();
+    var socNeeded = config.targetSOC - soc;
+    var kWhNeeded = (socNeeded / 100) * battery.usable;
+    var hoursNeeded = kWhNeeded / config.chargeRateKW;
+    var costCheap = kWhNeeded * config.pricing.cheap;
+
     try {
         var result = OvmsCommand.Exec("charge start");
         print("Result: " + result + "\n");
@@ -332,7 +363,26 @@ exports.start = function() {
             return false;
         }
 
-        safeNotify("info", "charge.manual", "Charging started at " + soc.toFixed(0) + "%");
+        // Build detailed notification with cost/time estimates
+        var msg = "Charging started: " + soc.toFixed(0) + "% → " + config.targetSOC + "%\n";
+        msg += "Time: " + hoursNeeded.toFixed(1) + "h (" + kWhNeeded.toFixed(1) + " kWh)\n";
+
+        // Check for overflow into expensive rate
+        var optimal = calculateOptimalStart();
+        if (optimal && !optimal.fitsInWindow && !optimal.emergency) {
+            var totalCost = costCheap + optimal.overflowCost;
+            msg += "Cost: " + config.pricing.currency + totalCost.toFixed(2);
+            msg += " (" + config.pricing.currency + costCheap.toFixed(2) + " cheap";
+            if (optimal.overflowCost > 0) {
+                msg += " + " + config.pricing.currency + optimal.overflowCost.toFixed(2) + " overflow)";
+            } else {
+                msg += ")";
+            }
+        } else {
+            msg += "Cost: " + config.pricing.currency + costCheap.toFixed(2) + " (cheap rate)";
+        }
+
+        safeNotify("info", "charge.schedule", msg);
 
         // Schedule automatic stop
         scheduleStop();
