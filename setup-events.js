@@ -3,29 +3,33 @@
  *
  * This script creates 48 clock events (every 30 minutes) that check the charging schedule.
  *
+ * COMMAND FORMAT NOTE:
+ * Commands use app-friendly format (no quotes, no spaces after commas)
+ * Works in OVMS Connect app and web console. Avoids smart quote issues on mobile.
+ *
  * INSTALLATION VIA WEB EDITOR:
  * 1. Open OVMS web interface → Tools → Editor
  * 2. Create new file: /store/scripts/setup-events.js
  * 3. Copy this entire file content
  * 4. Save the file
  * 5. Go to Tools → Shell
- * 6. At the OVMS shell prompt, enter this command:
- *    script eval "require('setup-events').install()"
+ * 6. At the OVMS shell prompt, enter:
+ *    script eval require('setup-events').install()
  * 7. Wait for "Installation complete!" message
  *
  * INSTALLATION VIA SSH:
  * 1. scp setup-events.js root@<your-ovms-ip>:/store/scripts/
  * 2. SSH to OVMS: ssh root@<your-ovms-ip>
- * 3. At the OVMS shell prompt, enter this command:
- *    script eval "require('setup-events').install()"
+ * 3. At the OVMS shell prompt, enter:
+ *    script eval require('setup-events').install()
  *
  * VERIFICATION:
  * vfs ls /store/events/
  * You should see 48 directories: clock.0000, clock.0030, clock.0100, ..., clock.2330
  *
  * REMOVAL:
- * To uninstall, enter this command:
- * script eval "require('setup-events').uninstall()"
+ * To uninstall, enter:
+ * script eval require('setup-events').uninstall()
  */
 
 // ============================================================================
@@ -38,7 +42,7 @@
 function install() {
     print("\n=== OVMS Smart Charging Event Installer ===\n\n");
 
-    var eventContent = 'script eval "charging.checkSchedule()"';
+    var eventContent = 'script eval charging.checkSchedule()';
     var created = 0;
     var errors = 0;
 
@@ -208,17 +212,17 @@ function help() {
     print("every 30 minutes (48 events total: 00:00, 00:30, 01:00, ..., 23:30)\n\n");
 
     print("Available commands:\n");
-    print('  script eval "require(\'setup-events\').install()"     - Create all clock events\n');
-    print('  script eval "require(\'setup-events\').uninstall()"   - Remove all clock events\n');
-    print('  script eval "require(\'setup-events\').listEvents()"  - Show installed events\n');
-    print('  script eval "require(\'setup-events\').help()"        - Show this help\n\n');
+    print("  script eval require('setup-events').install()     - Create all clock events\n");
+    print("  script eval require('setup-events').uninstall()   - Remove all clock events\n");
+    print("  script eval require('setup-events').listEvents()  - Show installed events\n");
+    print("  script eval require('setup-events').help()        - Show this help\n\n");
 
     print("Example workflow:\n");
-    print('  1. script eval "require(\'setup-events\').install()"        # Create events\n');
-    print('  2. script eval "charging.setSchedule(23, 30, 5, 30)"      # Configure schedule\n');
-    print('  3. script eval "charging.setLimits(80, 75)"               # Set SOC targets\n');
-    print('  4. script eval "charging.status()"                        # Check status\n');
-    print('  5. script eval "require(\'setup-events\').listEvents()"     # Verify installation\n\n');
+    print("  1. script eval require('setup-events').install()        # Create events\n");
+    print("  2. script eval charging.setSchedule(23,30,5,30)         # Configure schedule\n");
+    print("  3. script eval charging.setLimits(80,75)                # Set SOC targets\n");
+    print("  4. script eval charging.status()                        # Check status\n");
+    print("  5. script eval require('setup-events').listEvents()     # Verify installation\n\n");
 
     print("Need to modify frequency?\n");
     print("  - Every 15 minutes: Modify this script (change hours array)\n");
@@ -236,7 +240,7 @@ exports.listEvents = listEvents;
 exports.help = help;
 
 print("OVMS Charging Event Installer loaded\n");
-print('Run: script eval "require(\'setup-events\').install()" to create 48 clock events\n');
-print('Help: script eval "require(\'setup-events\').help()" for more information\n');
+print("Run: script eval require('setup-events').install() to create 48 clock events\n");
+print("Help: script eval require('setup-events').help() for more information\n");
 
 exports;

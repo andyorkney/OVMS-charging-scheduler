@@ -94,6 +94,8 @@ In OVMS web interface:
 
 Via **OVMS Web Shell** (Tools > Shell) or SSH:
 
+**Note:** Commands use app-friendly format (no quotes, no spaces). This avoids smart quote issues on mobile devices.
+
 ```javascript
 // Check if module loaded
 script eval charging
@@ -106,8 +108,8 @@ script eval charging.status()
 // Should display full status report
 
 // Test configuration
-script eval charging.setSchedule(23, 30, 5, 30)
-script eval charging.setLimits(80, 75)
+script eval charging.setSchedule(23,30,5,30)
+script eval charging.setLimits(80,75)
 script eval charging.getSchedule()
 ```
 

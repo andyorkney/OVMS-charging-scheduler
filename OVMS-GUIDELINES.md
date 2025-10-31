@@ -13,13 +13,28 @@
 - No `async`/`await` or Promises
 
 ### OVMS CLI Command Syntax
-**ALWAYS quote script eval commands:**
+
+**PRIMARY FORMAT (Recommended for all documentation):**
+Use app-friendly format without quotes and no spaces after commas:
+```
+script eval charging.checkSchedule()
+script eval charging.setSchedule(23,30,5,30)
+```
+
+**Why this format:**
+- Works in OVMS Connect app dashboard actions
+- Works in OVMS web console and SSH
+- Avoids smart quote issues on mobile keyboards (mobile keyboards insert " " which break commands)
+- Simpler and more consistent
+
+**ALTERNATIVE FORMAT (Web console only):**
+Quoted format with spaces is acceptable for web console/SSH:
 ```
 script eval "charging.checkSchedule()"
 script eval "charging.setSchedule(23, 30, 5, 30)"
 ```
 
-**Why:** OVMS CLI parser treats spaces as argument separators. Without quotes, commands with spaces will fail.
+**However:** Use the app-friendly format as primary in all documentation to ensure compatibility everywhere.
 
 ---
 
@@ -35,30 +50,30 @@ script eval "charging.setSchedule(23, 30, 5, 30)"
  */
 ```
 
-**CORRECT:**
+**CORRECT (app-friendly format):**
 ```javascript
 /**
  * Check current schedule status
- * Usage: script eval "charging.checkSchedule()"
+ * Usage: script eval charging.checkSchedule()
  */
 ```
 
 **WRONG:**
 ```javascript
-// Set schedule: setSchedule(startHour, startMin, endHour, endMin)
+// Set schedule: setSchedule(startHour,startMin,endHour,endMin)
 ```
 
 **CORRECT:**
 ```javascript
-// Set schedule: script eval "charging.setSchedule(startHour, startMin, endHour, endMin)"
+// Set schedule: script eval charging.setSchedule(startHour,startMin,endHour,endMin)
 ```
 
 ### Why this matters:
-Users copy/paste examples from code comments directly into OVMS CLI. If examples don't include `script eval "..."`, they won't work.
+Users copy/paste examples from code comments into OVMS CLI and OVMS Connect app. Using app-friendly format (no quotes, no spaces after commas) ensures commands work everywhere and avoids smart quote issues on mobile.
 
 ### Every function comment must show:
 1. The full command: `script eval`
-2. Quoted syntax: `"function()"`
+2. App-friendly format: no outer quotes, no spaces after commas
 3. Realistic example values
 
 **Template for all function documentation:**
@@ -69,8 +84,8 @@ Users copy/paste examples from code comments directly into OVMS CLI. If examples
  * @param paramName - description
  * @returns description
  *
- * Usage: script eval "moduleName.functionName(arg1, arg2)"
- * Example: script eval "charging.setSchedule(23, 30, 5, 30)"
+ * Usage: script eval moduleName.functionName(arg1,arg2)
+ * Example: script eval charging.setSchedule(23,30,5,30)
  */
 ```
 
@@ -80,18 +95,31 @@ Users copy/paste examples from code comments directly into OVMS CLI. If examples
 
 All command examples in README.md must:
 - Include `script eval` prefix
-- Use quoted syntax
+- Use app-friendly format (no quotes, no spaces after commas)
 - Show realistic parameter values
 - Be formatted consistently
+- Include note about format compatibility at the beginning
 
 **Example section format:**
 ```markdown
 ### Check Schedule Status
 ```
-script eval "charging.checkSchedule()"
+script eval charging.checkSchedule()
 ```
 
 Returns current schedule and charging status.
+```
+
+**Always include format note at top of README:**
+```markdown
+## 📱 Command Format - IMPORTANT!
+
+Commands in this guide use **app-friendly format** (works everywhere):
+- No outer quotes
+- No spaces after commas
+- Example: `script eval charging.setSchedule(23,30,5,30)`
+
+Why? Mobile keyboards insert "smart quotes" which break commands.
 ```
 
 ---
