@@ -124,6 +124,36 @@ Why? Mobile keyboards insert "smart quotes" which break commands.
 
 ---
 
+## Event File Format
+
+Event files stored in `/store/events/clock.HHMM/` directories should be **JavaScript files** with `.js` extension.
+
+**Correct format:**
+```javascript
+// File: /store/events/clock.2330/010-start-charge.js
+charging.start();
+```
+
+**Incorrect format (old shell approach - NO LONGER USED):**
+```bash
+# File: /store/events/clock.2330/010-start-charge (no .js)
+script eval charging.start()
+```
+
+**Why use .js files:**
+- Direct JavaScript execution (no shell layer)
+- No quoting concerns whatsoever
+- Cleaner, more efficient code
+- Per OVMS docs: "If the event script is written in Javascript, be sure to add the suffix `.js` to the name"
+
+**Requirements:**
+- Files MUST have `.js` extension
+- Content is pure JavaScript (no `script eval` wrapper)
+- Assumes `charging` is loaded globally in `ovmsmain.js`
+- Use direct function calls: `charging.start();` not `script eval charging.start()`
+
+---
+
 ## Testing Before Commit (REQUIRED!)
 
 ### Automated Validation

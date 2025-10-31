@@ -133,19 +133,21 @@ script eval charging.setSchedule(23,30,5,30)
 
 **Start charging at 23:30** (11:30 PM):
 - Create directory: `/store/events/clock.2330/`
-- Create file: `/store/events/clock.2330/010-start-charge`
+- Create file: `/store/events/clock.2330/010-start-charge.js`
 - Content:
-  ```
-  script eval charging.start()
+  ```javascript
+  charging.start();
   ```
 
 **Stop charging at 05:30** (5:30 AM):
 - Create directory: `/store/events/clock.0530/`
-- Create file: `/store/events/clock.0530/010-stop-charge`
+- Create file: `/store/events/clock.0530/010-stop-charge.js`
 - Content:
+  ```javascript
+  charging.stop();
   ```
-  script eval charging.stop()
-  ```
+
+**Note:** Event files use `.js` extension and contain direct JavaScript code (no `script eval` wrapper needed).
 
 ### 4. Reload JS Engine
 
@@ -419,19 +421,21 @@ script eval charging.status()
 
 Create different clock events for different scenarios:
 
-```bash
-# Weekday schedule (earlier start)
-/store/events/clock.2200/010-weekday-charge
-  Content: script eval charging.start()
+```javascript
+// Weekday schedule (earlier start)
+// File: /store/events/clock.2200/010-weekday-charge.js
+charging.start();
 
-# Weekend schedule (later start)
-/store/events/clock.0100/010-weekend-charge
-  Content: script eval charging.start()
+// Weekend schedule (later start)
+// File: /store/events/clock.0100/010-weekend-charge.js
+charging.start();
 
-# Common stop time
-/store/events/clock.0630/010-stop-charge
-  Content: script eval charging.stop()
+// Common stop time
+// File: /store/events/clock.0630/010-stop-charge.js
+charging.stop();
 ```
+
+**Note:** Event files are JavaScript (`.js` extension) and contain direct function calls.
 
 ### Integration with Home Automation
 

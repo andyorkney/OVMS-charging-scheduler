@@ -2,6 +2,8 @@
 
 This guide explains how to set up clock event files on your OVMS module to enable automatic charging.
 
+**Event File Format:** Event files use `.js` extension and contain direct JavaScript code (no `script eval` wrapper needed).
+
 ## ⭐ RECOMMENDED METHOD: Automated Installer (No SSH Required!)
 
 **The easiest way** is to use the JavaScript installer via the OVMS web interface:
@@ -12,7 +14,7 @@ This guide explains how to set up clock event files on your OVMS module to enabl
    ```
    script eval require("setup-events").install()
    ```
-4. Done! 48 clock events created automatically
+4. Done! 48 JavaScript event files (.js) created automatically
 
 See the main README.md for complete installation instructions.
 
@@ -25,15 +27,15 @@ If you prefer command-line setup or need to customize:
 ```bash
 ssh root@<your-ovms-ip>
 
-# Create the event file content
-EVENT_CONTENT="script eval charging.checkSchedule()"
+# Create the event file content (JavaScript code)
+EVENT_CONTENT="charging.checkSchedule();"
 
-# Create clock events for every 30 minutes (48 events total)
+# Create JavaScript event files for every 30 minutes (48 events total)
 for hour in {0..23}; do
     for minute in 00 30; do
         DIR="/store/events/clock.$(printf '%02d%02d' $hour $minute)"
         mkdir -p "$DIR"
-        echo "$EVENT_CONTENT" > "$DIR/charging-check"
+        echo "$EVENT_CONTENT" > "$DIR/charging-check.js"
     done
 done
 
@@ -43,7 +45,7 @@ echo "Clock events created!"
 2. **Set your charging times via command** (no file editing needed!):
 
 ```
-script eval charging.setSchedule(23,30,5,30)
+charging.setSchedule(23,30,5,30)
 ```
 
 That's it! The system will automatically:
@@ -53,8 +55,8 @@ That's it! The system will automatically:
 
 **Change times anytime** without editing files:
 ```
-script eval charging.setSchedule(22,0,6,0)
-script eval charging.getSchedule()
+charging.setSchedule(22,0,6,0)
+charging.getSchedule()
 ```
 
 ---
@@ -68,9 +70,11 @@ For advanced users who want fine-grained control over individual clock events.
 Clock events are stored in `/store/events/clock.HHMM/` where `HHMM` is 24-hour time:
 
 ```
-/store/events/clock.2330/010-start-charge
-/store/events/clock.0530/010-stop-charge
+/store/events/clock.2330/010-start-charge.js
+/store/events/clock.0530/010-stop-charge.js
 ```
+
+**Important:** Files must have `.js` extension to be executed as JavaScript.
 
 ## Creating Event Files
 
@@ -94,19 +98,17 @@ mkdir -p /store/events/clock.2330
 mkdir -p /store/events/clock.0530
 
 # Create start event (23:30 = 11:30 PM)
-cat > /store/events/clock.2330/010-start-charge << 'EOF'
-script eval charging.start()
+cat > /store/events/clock.2330/010-start-charge.js << 'EOF'
+charging.start();
 EOF
 
 # Create stop event (05:30 = 5:30 AM)
-cat > /store/events/clock.0530/010-stop-charge << 'EOF'
-script eval charging.stop()
+cat > /store/events/clock.0530/010-stop-charge.js << 'EOF'
+charging.stop();
 EOF
-
-# Make files executable (optional but recommended)
-chmod +x /store/events/clock.2330/010-start-charge
-chmod +x /store/events/clock.0530/010-stop-charge
 ```
+
+**Note:** JavaScript (.js) files don't need execute permissions.
 
 ## Event File Examples
 
@@ -116,14 +118,14 @@ chmod +x /store/events/clock.0530/010-stop-charge
 
 File: `/store/events/clock.2330/010-start-charge`
 ```
-script eval charging.start()
+charging.start()
 ```
 
 **Stop at 5:30 AM (05:30)**
 
 File: `/store/events/clock.0530/010-stop-charge`
 ```
-script eval charging.stop()
+charging.stop()
 ```
 
 ### Multiple Daily Windows
@@ -134,14 +136,14 @@ You can have multiple charging windows by creating multiple clock events:
 
 File: `/store/events/clock.1000/010-morning-charge`
 ```
-script eval charging.start()
+charging.start()
 ```
 
 **Stop morning charge at 11:00 AM**
 
 File: `/store/events/clock.1100/010-stop-morning-charge`
 ```
-script eval charging.stop()
+charging.stop()
 ```
 
 ### Intelligent Ready-By Scheduling
@@ -152,14 +154,14 @@ For dynamic start times based on "ready by" target:
 
 File: `/store/events/clock.0000/010-configure-charging`
 ```
-script eval charging.setReadyBy(7,30)
+charging.setReadyBy(7,30)
 ```
 
 **Start at calculated optimal time (still use fixed event as backup)**
 
 File: `/store/events/clock.2330/010-start-charge`
 ```
-script eval charging.start()
+charging.start()
 ```
 
 The module will calculate the optimal start time and only start if needed.
@@ -170,7 +172,7 @@ The module will calculate the optimal start time and only start if needed.
 
 File: `/store/events/clock.1800/010-status-check`
 ```
-script eval charging.nextCharge()
+charging.nextCharge()
 ```
 
 This will send a notification showing when the next charge will occur.
@@ -181,7 +183,7 @@ This will send a notification showing when the next charge will occur.
 
 File: `/store/events/clock.0700/010-set-weekday-limits`
 ```
-script eval charging.setLimits(80,75)
+charging.setLimits(80,75)
 ```
 
 ## File Naming Convention
@@ -223,7 +225,7 @@ To test an event without waiting for the scheduled time:
 
 ```bash
 # Via SSH
-script eval charging.start()
+charging.start()
 
 # Or trigger the event file directly
 /store/events/clock.2330/010-start-charge
@@ -255,10 +257,10 @@ Charge during cheap night rate (23:30 to 05:30):
 
 ```bash
 # /store/events/clock.2330/010-start-charge
-script eval charging.start()
+charging.start()
 
 # /store/events/clock.0530/010-stop-charge
-script eval charging.stop()
+charging.stop()
 ```
 
 ### Configuration 2: Granny Charger (Slow)
@@ -267,13 +269,13 @@ Longer charging window for slow charger:
 
 ```bash
 # /store/events/clock.2000/010-configure-slow
-script eval charging.setChargeRate(1.8)
+charging.setChargeRate(1.8)
 
 # /store/events/clock.2000/020-start-charge
-script eval charging.start()
+charging.start()
 
 # /store/events/clock.0800/010-stop-charge
-script eval charging.stop()
+charging.stop()
 ```
 
 ### Configuration 3: Ready-By Intelligent Mode
@@ -282,10 +284,10 @@ Optimize start time for 7:30 AM departure:
 
 ```bash
 # /store/events/clock.2200/010-configure-ready-by
-script eval charging.setReadyBy(7,30)
+charging.setReadyBy(7,30)
 
 # /store/events/clock.2330/010-start-if-needed
-script eval charging.start()
+charging.start()
 ```
 
 The module calculates when to actually start based on current SOC.
@@ -297,17 +299,17 @@ Different charging strategies for different rate periods:
 ```bash
 # Super cheap rate (01:00-05:00)
 # /store/events/clock.0100/010-cheap-rate-start
-script eval charging.setLimits(90,85)
-script eval charging.start()
+charging.setLimits(90,85)
+charging.start()
 
 # Normal cheap rate (23:30-01:00)
 # /store/events/clock.2330/010-normal-rate-start
-script eval charging.setLimits(80,75)
-script eval charging.start()
+charging.setLimits(80,75)
+charging.start()
 
 # Stop at rate change
 # /store/events/clock.0500/010-stop-charge
-script eval charging.stop()
+charging.stop()
 ```
 
 ## Troubleshooting
@@ -326,7 +328,7 @@ script eval charging.stop()
 
 3. **Check script syntax**: Test commands manually first
    ```bash
-   script eval charging.status()
+   charging.status()
    ```
 
 4. **Review logs**: Check for error messages
@@ -352,7 +354,7 @@ If events execute at wrong times:
 Check charging status to diagnose:
 
 ```bash
-script eval charging.status()
+charging.status()
 ```
 
 Look for:
