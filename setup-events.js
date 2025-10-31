@@ -47,7 +47,8 @@ function install() {
     var created = 0;
     var errors = 0;
 
-    print("Creating JavaScript event files for every 30 minutes (48 total)...\n\n");
+    print("Creating JavaScript event files for every 30 minutes (48 total)...\n");
+    print("This may take a moment to avoid file descriptor exhaustion...\n\n");
 
     // Create events for every 30 minutes (00 and 30 minutes of each hour)
     for (var hour = 0; hour < 24; hour++) {
@@ -73,6 +74,12 @@ function install() {
                 created++;
                 print("[OK] Created: " + dirName + "/charging-check.js\n");
 
+                // Small delay to prevent VFS file descriptor exhaustion
+                // Every 6 files, pause briefly to let file handles close
+                if (created % 6 === 0) {
+                    OvmsCommand.Exec("script eval 1");  // Brief pause
+                }
+
             } catch (e) {
                 errors++;
                 print("[ERROR] Error creating " + dirName + ": " + e.message + "\n");
@@ -84,14 +91,18 @@ function install() {
     print("Events created: " + created + "\n");
     print("Errors: " + errors + "\n\n");
 
-    if (errors === 0) {
+    if (errors === 0 && created === 48) {
         print("[OK] Installation complete!\n\n");
         print("Your charging module will now check the schedule every 30 minutes.\n");
         print("Next steps:\n");
         print("  1. Configure your schedule: charging.setSchedule(23,30,5,30)\n");
         print("  2. Set charge limits: charging.setLimits(80,75)\n");
         print("  3. Check status: charging.status()\n\n");
-    } else {
+    } else if (created > 0 && created < 48) {
+        print("[WARNING] Partial installation - only " + created + " of 48 files created.\n");
+        print("This may be due to VFS file descriptor exhaustion.\n");
+        print("Run the install command again to create the missing files.\n\n");
+    } else if (errors > 0) {
         print("[WARNING] Installation completed with errors.\n");
         print("Some events may not have been created.\n");
         print("You can try running the install command again.\n\n");
