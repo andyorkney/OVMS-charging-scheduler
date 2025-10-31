@@ -74,14 +74,11 @@ function install() {
             var filePath = dirPath + "/charging-check.js";
 
             try {
-                // Check if file already exists
-                var exists = false;
-                try {
-                    VFS.Open(filePath);
-                    exists = true;
-                } catch (e) {
-                    exists = false;
-                }
+                // Check if file already exists using vfs stat (same method as listEvents)
+                var statResult = OvmsCommand.Exec("vfs stat " + filePath);
+                var exists = statResult &&
+                            statResult.indexOf("Error") === -1 &&
+                            statResult.indexOf("not found") === -1;
 
                 if (exists) {
                     skipped++;
