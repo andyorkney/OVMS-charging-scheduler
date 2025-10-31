@@ -50,9 +50,12 @@ function install() {
     var skipped = 0;
     var errors = 0;
     var MAX_PER_RUN = 5;  // Limit to 5 files per run to avoid system strain
+    var MAX_CHECKS = 10;  // Stop after checking this many files to prevent event queue blocking
 
     print("BATCHED MODE: Creating max " + MAX_PER_RUN + " files per run.\n");
     print("This prevents system overload. Run multiple times to complete.\n\n");
+
+    var checked = 0;  // Track total files checked
 
     // Create events for every 30 minutes (00 and 30 minutes of each hour)
     for (var hour = 0; hour < 24; hour++) {
@@ -61,10 +64,12 @@ function install() {
         for (var i = 0; i < hours.length; i++) {
             var minute = hours[i];
 
-            // Stop after creating MAX_PER_RUN files
-            if (created >= MAX_PER_RUN) {
+            // Stop after creating MAX_PER_RUN files OR checking MAX_CHECKS files
+            if (created >= MAX_PER_RUN || checked >= MAX_CHECKS) {
                 break;
             }
+
+            checked++;  // Increment before checking to avoid infinite loops
 
             // Format: clock.HHMM (e.g., clock.0000, clock.0030, clock.0100)
             var hourStr = (hour < 10) ? "0" + hour : "" + hour;
@@ -103,13 +108,14 @@ function install() {
             }
         }
 
-        // Break outer loop too if we hit the limit
-        if (created >= MAX_PER_RUN) {
+        // Break outer loop too if we hit either limit
+        if (created >= MAX_PER_RUN || checked >= MAX_CHECKS) {
             break;
         }
     }
 
     print("\n=== Installation Summary ===\n");
+    print("Files checked: " + checked + " (max " + MAX_CHECKS + " per run to prevent blocking)\n");
     print("Events created: " + created + "\n");
     print("Already existed: " + skipped + "\n");
     print("Errors: " + errors + "\n\n");
@@ -123,9 +129,9 @@ function install() {
         print("  2. Set charge limits: charging.setLimits(80,75)\n");
         print("  3. Check status: charging.status()\n\n");
     } else if (total < 48) {
-        print("[WARNING] Partial installation - " + total + " of 48 files exist.\n");
-        print("Created " + created + " new files this run.\n");
-        print("Run the install command again to create the remaining " + (48 - total) + " files.\n\n");
+        print("[WARNING] Partial installation - " + total + " of 48 files verified.\n");
+        print("Created " + created + " new files this run (checked " + checked + " total).\n");
+        print("Run the install command again to continue installation.\n\n");
     } else if (errors > 0) {
         print("[WARNING] Installation completed with errors.\n");
         print("Some events may not have been created.\n");

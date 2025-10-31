@@ -610,6 +610,20 @@ exports.checkSchedule = function() {
         // Outside charging window but still charging - stop
         print("Auto-stop: Outside charging window (after " + stopDesc + ")\n");
         exports.stop();
+    } else {
+        // No action needed - print status so user knows it ran
+        var status = "No action: ";
+        if (!plugged) {
+            status += "not plugged in";
+        } else if (inWindow && charging) {
+            status += "in window, already charging";
+        } else if (!inWindow && !charging) {
+            status += "outside window (" + startDesc + " to " + stopDesc + "), not charging";
+        } else {
+            status += "waiting for charging window";
+        }
+        status += " (SOC " + soc.toFixed(0) + "%, " + now.toString() + ")";
+        print(status + "\n");
     }
 };
 
