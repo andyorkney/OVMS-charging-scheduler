@@ -100,10 +100,11 @@ function install() {
 
 /**
  * Uninstall clock events (cleanup)
+ * Removes both old format (no .js) and new format (.js) files
  */
 function uninstall() {
     print("\n=== OVMS Smart Charging Event Uninstaller ===\n\n");
-    print("[WARNING] This will remove all charging-check.js event files!\n");
+    print("[WARNING] This will remove all charging-check event files!\n");
     print("Proceeding with removal...\n\n");
 
     var removed = 0;
@@ -119,25 +120,37 @@ function uninstall() {
             var hourStr = (hour < 10) ? "0" + hour : "" + hour;
             var minStr = (minute < 10) ? "0" + minute : "" + minute;
             var dirName = "clock." + hourStr + minStr;
-            var filePath = "/store/events/" + dirName + "/charging-check.js";
 
-            try {
-                // Remove event file using vfs command
-                var result = OvmsCommand.Exec("vfs rm " + filePath);
+            // Try to remove both old format (no .js) and new format (.js)
+            var filePaths = [
+                "/store/events/" + dirName + "/charging-check.js",  // New format
+                "/store/events/" + dirName + "/charging-check"      // Old format
+            ];
 
-                // Check if command succeeded (file not found is okay)
-                if (result && result.indexOf("Error") !== -1 &&
-                    result.indexOf("not found") === -1 &&
-                    result.indexOf("No such") === -1) {
-                    errors++;
-                    print("[ERROR] Error removing " + dirName + ": " + result + "\n");
-                } else {
-                    removed++;
-                    print("[OK] Removed: " + dirName + "/charging-check.js\n");
+            for (var j = 0; j < filePaths.length; j++) {
+                var filePath = filePaths[j];
+
+                try {
+                    // Remove event file using vfs command
+                    var result = OvmsCommand.Exec("vfs rm " + filePath);
+
+                    // Check if command succeeded (file not found is okay)
+                    if (result && result.indexOf("Error") !== -1 &&
+                        result.indexOf("not found") === -1 &&
+                        result.indexOf("No such") === -1) {
+                        errors++;
+                        print("[ERROR] Error removing " + filePath + ": " + result + "\n");
+                    } else if (result && (result.indexOf("not found") === -1 && result.indexOf("No such") === -1)) {
+                        removed++;
+                        print("[OK] Removed: " + filePath + "\n");
+                    }
+                } catch (e) {
+                    // Only report error if it's not a "file not found" error
+                    if (e.message.indexOf("not found") === -1 && e.message.indexOf("No such") === -1) {
+                        errors++;
+                        print("[ERROR] Error removing " + filePath + ": " + e.message + "\n");
+                    }
                 }
-            } catch (e) {
-                errors++;
-                print("[ERROR] Error removing " + dirName + ": " + e.message + "\n");
             }
 
             // Note: We don't remove the directories themselves as they might contain
