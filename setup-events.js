@@ -88,8 +88,8 @@ function install() {
         print("[OK] Installation complete!\n\n");
         print("Your charging module will now check the schedule every 30 minutes.\n");
         print("Next steps:\n");
-        print("  1. Configure your schedule: charging.setSchedule(23, 30, 5, 30)\n");
-        print("  2. Set charge limits: charging.setLimits(80, 75)\n");
+        print("  1. Configure your schedule: charging.setSchedule(23,30,5,30)\n");
+        print("  2. Set charge limits: charging.setLimits(80,75)\n");
         print("  3. Check status: charging.status()\n\n");
     } else {
         print("[WARNING] Installation completed with errors.\n");
@@ -234,6 +234,11 @@ function help() {
 // ============================================================================
 // EXPORTS
 // ============================================================================
+
+// Ensure exports object exists (for OVMS compatibility)
+if (typeof exports === 'undefined') {
+    var exports = {};
+}
 
 exports.install = install;
 exports.uninstall = uninstall;
