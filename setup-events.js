@@ -81,7 +81,10 @@ function install() {
                     continue;
                 }
 
-                // VFS.Save automatically creates missing directories
+                // Create directory first (mkdir will fail silently if it already exists)
+                OvmsCommand.Exec("vfs mkdir " + dirPath);
+
+                // Now create the file
                 VFS.Save({
                     path: filePath,
                     data: eventContent
