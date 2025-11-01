@@ -24,7 +24,7 @@ Use this checklist to verify nothing is broken or missing.
 - `checkSchedule()`: Must monitor SOC and stop if >= target
 - Line numbers: _____________
 
-**Current Status**: ❌ FAILING - Charges to 98% instead of 80-90%
+**Current Status**: ❌ was working we broke it - FAILING - Charges to 98% instead of 80-90%
 
 ---
 
@@ -42,7 +42,7 @@ Use this checklist to verify nothing is broken or missing.
 - `checkSchedule()`: Lines 658-667
 - Clock events: Every 30 minutes
 
-**Current Status**: ✅ WORKING - Confirmed by user
+**Current Status**: ✅ WORKING - Confirmed in real world
 
 ---
 
@@ -60,7 +60,7 @@ Use this checklist to verify nothing is broken or missing.
 - `checkSchedule()`: Lines 660-667
 - `canCharge()`: Lines 631-639
 
-**Current Status**: ⚠️ UNVERIFIED
+**Current Status**: ⚠️ UNVERIFIED - real world tests required
 
 ---
 
@@ -79,21 +79,21 @@ Use this checklist to verify nothing is broken or missing.
 **Code Locations**:
 - `getBatteryParams()`: Lines 129-183
 
-**Current Status**: ⚠️ UNVERIFIED
+**Current Status**: ⚠️ UNVERIFIED? - I think this is Verified working
 
 ---
 
 ### 5. Intelligent "Ready By" Scheduling
-**Requirement**: Calculate optimal start time to finish charging exactly at ready-by time
+**Requirement**: Is at the required percentage ~~exactly at~~ BY ready-by (time) - unless there just is not enough time - warn if physically impossible to be ready on time. 
 
 **How to Verify**:
 - [ ] Set charger rate: `charging.setChargeRate(7.0)`
 - [ ] Set ready-by: `charging.setReadyBy(7,30)`
 - [ ] Run: `charging.status()`
-- [ ] Check: Does "Optimal start" time make sense?
-  - Example: If need 4h charge, start should be 03:30
+- [ ] Check: Can charge percentage be reached after starting at 23:30 and ready by set-time
+  - Example: If needs to be ready at 05:00, calculates time to start to be ready by 05:00 and warns of costs and timings.
 
-**Expected Result**: Calculated start time = ready-by time - charge duration
+**Expected Result**: Calculated start time needed to charge%, starts at that time with advisories
 
 **Code Locations**:
 - `calculateOptimalStart()`: Lines 677-776
@@ -117,15 +117,15 @@ Use this checklist to verify nothing is broken or missing.
 **Code Locations**:
 - All `safeNotify()` calls throughout code
 
-**Current Status**: ⚠️ UNVERIFIED
+**Current Status**: testing so far actually has 2x notification in OVMS COnnect 
 
 ---
 
 ### 7. Event-Driven (No Continuous CPU Load)
-**Requirement**: No ticker events, only clock events every 30 minutes
+**Requirement**: Ideally No ticker events, only clock events every 30 minutes ?
 
 **How to Verify**:
-- [ ] Check no `ticker.X` events subscribed
+- [ ] Check no excessive `ticker.X` events subscribed
 - [ ] Verify only `clock.HHMM` events exist
 - [ ] Monitor: Event queue should not back up
 
@@ -139,19 +139,19 @@ Use this checklist to verify nothing is broken or missing.
 
 ---
 
-### 8. Stop at Window End Time (Fallback)
-**Requirement**: If SOC not reached, stop charging at window end (05:30)
+### 8. ~~Stop at Window End Time (Fallback)~~ Warn that charge is not going to complete in window
+**Requirement**: If SOC not reached, warn of time and cost outside window  (23:30 - 05:30)
 
 **How to Verify**:
 - [ ] Start charging at very low SOC (won't reach target in time)
-- [ ] Monitor: Does it stop at 05:30?
+- [ ] Monitor: Does it calculate time needed, start early, finish later and advice of costs?
 
-**Expected Result**: Charging stops at window end time
+**Expected Result**: Charging does best to charge in window but prioritises to reach percentage requested, warns and provides costs and end time.
 
 **Code Locations**:
 - `checkSchedule()`: Lines 672-675
 
-**Current Status**: ✅ WORKING (time-based stop exists)
+**Current Status**: UNVERIFIED was WORKING (time-based stop exists and works but not as originally specified)
 
 ---
 
@@ -176,7 +176,7 @@ Use this checklist to verify nothing is broken or missing.
 ## Nice-to-Have Features (SHOULD WORK)
 
 ### 10. Cost Calculations with Overflow Warning
-**Requirement**: Show estimated cost, warn if charging extends beyond cheap window
+**Requirement**: Show estimated cost, warn if charging extends beyond cheap window and when estimated to finish
 
 **How to Verify**:
 - [ ] Run: `charging.status()` with ready-by mode
@@ -263,7 +263,7 @@ Use this checklist to verify nothing is broken or missing.
 2. Target: 80%
 3. Ready by: 07:30
 4. Charge rate: 7kW
-5. Expected: Calculate start time, charge exactly to finish at 07:30
+5. Expected: Calculate start time, to ensue SOC is 80% +/-2%
 
 ---
 
