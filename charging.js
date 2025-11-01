@@ -352,15 +352,6 @@ exports.start = function() {
     var costCheap = kWhNeeded * config.pricing.cheap;
 
     try {
-        // Set charge mode and SOC limit before starting
-        print("Setting charge limit to " + config.targetSOC + "%\n");
-        var limitResult = OvmsCommand.Exec("charge mode storage");
-        var socResult = OvmsCommand.Exec("charge limit soc " + config.targetSOC);
-
-        // Small delay to ensure settings are applied
-        var startTime = Date.now();
-        while (Date.now() - startTime < 500) { /* 500ms delay */ }
-
         var result = OvmsCommand.Exec("charge start");
         print("Result: " + result + "\n");
 
@@ -371,6 +362,10 @@ exports.start = function() {
             safeNotify("alert", "charge.manual", "Start command failed: " + result);
             return false;
         }
+
+        // Subscribe to ticker.60 for SOC monitoring (Priority #1: Stop at target SOC)
+        print("Starting SOC monitoring (checking every 60 seconds)\n");
+        PubSub.subscribe("ticker.60", monitorSOC);
 
         // Build detailed notification with cost/time estimates
         var msg = "Charging started: " + soc.toFixed(0) + "% → " + config.targetSOC + "%\n";
@@ -393,7 +388,7 @@ exports.start = function() {
 
         safeNotify("info", "charge.schedule", msg);
 
-        // Schedule automatic stop
+        // Schedule automatic stop at window end time (fallback)
         scheduleStop();
         return true;
     } catch (e) {
@@ -430,6 +425,10 @@ exports.stop = function() {
             safeNotify("alert", "charge.manual", "Stop command failed: " + result);
             return false;
         }
+
+        // Unsubscribe from SOC monitoring
+        PubSub.unsubscribe("ticker.60", monitorSOC);
+        print("SOC monitoring stopped\n");
 
         safeNotify("info", "charge.manual", "Stopped at " + soc.toFixed(0) + "%");
         return true;
@@ -665,10 +664,6 @@ exports.checkSchedule = function() {
             print("Skip: SOC " + soc.toFixed(0) + "% >= " + config.skipIfAbove +
                   "% (already charged enough)\n");
         }
-    } else if (inWindow && charging && soc >= config.targetSOC) {
-        // In window, charging, but reached target SOC - stop
-        print("Auto-stop: Target SOC reached (" + soc.toFixed(0) + "% >= " + config.targetSOC + "%)\n");
-        exports.stop();
     } else if (!inWindow && charging) {
         // Outside charging window but still charging - stop
         print("Auto-stop: Outside charging window (after " + stopDesc + ")\n");
@@ -700,6 +695,27 @@ exports.checkSchedule = function() {
 function invalidateBatteryCache() {
     batteryCache = null;
     batteryCacheExpiry = 0;
+}
+
+/**
+ * Monitor SOC during charging and stop at target
+ * Called every 60 seconds via ticker.60 subscription
+ * Priority #1: Stop at target SOC
+ */
+function monitorSOC() {
+    var charging = getSafeMetric("v.c.charging", false);
+    var soc = getSafeMetric("v.b.soc", 0);
+
+    // Only act if currently charging
+    if (!charging) {
+        return;
+    }
+
+    // Check if target SOC reached
+    if (soc >= config.targetSOC) {
+        print("Target SOC reached: " + soc.toFixed(1) + "% >= " + config.targetSOC + "%\n");
+        exports.stop();
+    }
 }
 
 /**
