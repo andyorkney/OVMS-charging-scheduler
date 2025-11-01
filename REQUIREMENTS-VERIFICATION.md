@@ -72,7 +72,7 @@ When requirements conflict, this hierarchy determines which wins:
 - `checkSchedule()`: Monitor SOC and stop if >= target
 - Consider: Ticker event subscription while charging for fast chargers
 
-**Current Status**: ❌ FAILING - Charges to 98% instead of 80-90%
+**Current Status**: ❌ was working we broke it - FAILING - Charges to 98% instead of 80-90%
 
 ---
 
@@ -114,7 +114,7 @@ When requirements conflict, this hierarchy determines which wins:
 - `checkSchedule()`: Lines 660-667
 - `canCharge()`: Lines 631-639
 
-**Current Status**: ⚠️ UNVERIFIED
+**Current Status**: ⚠️ UNVERIFIED - real world tests required
 
 ---
 
@@ -133,7 +133,7 @@ When requirements conflict, this hierarchy determines which wins:
 **Code Locations**:
 - `getBatteryParams()`: Lines 129-183
 
-**Current Status**: ⚠️ UNVERIFIED
+**Current Status**: ⚠️ UNVERIFIED? - I think this is Verified working
 
 ---
 
@@ -157,6 +157,10 @@ When requirements conflict, this hierarchy determines which wins:
 - Shows cost warning if overflow into expensive rate
 
 **Important**: Ready-by time is a deadline, not an exact target. Better to finish early than late.
+- [ ] Check: Can charge percentage be reached after starting at 23:30 and ready by set-time
+  - Example: If needs to be ready at 05:00, calculates time to start to be ready by 05:00 and warns of costs and timings.
+
+**Expected Result**: Calculated start time needed to charge%, starts at that time with advisories
 
 **Code Locations**:
 - `calculateOptimalStart()`: Lines 677-776
@@ -180,7 +184,7 @@ When requirements conflict, this hierarchy determines which wins:
 **Code Locations**:
 - All `safeNotify()` calls throughout code
 
-**Current Status**: ⚠️ UNVERIFIED
+**Current Status**: testing so far actually has 2x notification in OVMS COnnect 
 
 ---
 
@@ -234,7 +238,7 @@ When requirements conflict, this hierarchy determines which wins:
 **Code Locations**:
 - `checkSchedule()`: Lines 672-675
 
-**Current Status**: ✅ WORKING (time-based stop exists)
+**Current Status**: UNVERIFIED was WORKING (time-based stop exists and works but not as originally specified)
 
 ---
 
@@ -259,7 +263,7 @@ When requirements conflict, this hierarchy determines which wins:
 ## Nice-to-Have Features (SHOULD WORK)
 
 ### 10. Cost Calculations with Overflow Warning
-**Requirement**: Show estimated cost, warn if charging extends beyond cheap window
+**Requirement**: Show estimated cost, warn if charging extends beyond cheap window and when estimated to finish
 
 **How to Verify**:
 - [ ] Run: `charging.status()` with ready-by mode
@@ -357,7 +361,7 @@ When requirements conflict, this hierarchy determines which wins:
 2. Target: 80%
 3. Ready by: 07:30
 4. Charge rate: 7kW
-5. Expected: Calculate start time, charge exactly to finish at 07:30
+5. Expected: Calculate start time, to ensue SOC is 80% +/-2%
 
 ---
 
