@@ -352,6 +352,15 @@ exports.start = function() {
     var costCheap = kWhNeeded * config.pricing.cheap;
 
     try {
+        // Set charge mode and SOC limit before starting
+        print("Setting charge limit to " + config.targetSOC + "%\n");
+        var limitResult = OvmsCommand.Exec("charge mode storage");
+        var socResult = OvmsCommand.Exec("charge limit soc " + config.targetSOC);
+
+        // Small delay to ensure settings are applied
+        var startTime = Date.now();
+        while (Date.now() - startTime < 500) { /* 500ms delay */ }
+
         var result = OvmsCommand.Exec("charge start");
         print("Result: " + result + "\n");
 
@@ -656,6 +665,10 @@ exports.checkSchedule = function() {
             print("Skip: SOC " + soc.toFixed(0) + "% >= " + config.skipIfAbove +
                   "% (already charged enough)\n");
         }
+    } else if (inWindow && charging && soc >= config.targetSOC) {
+        // In window, charging, but reached target SOC - stop
+        print("Auto-stop: Target SOC reached (" + soc.toFixed(0) + "% >= " + config.targetSOC + "%)\n");
+        exports.stop();
     } else if (!inWindow && charging) {
         // Outside charging window but still charging - stop
         print("Auto-stop: Outside charging window (after " + stopDesc + ")\n");
@@ -666,7 +679,7 @@ exports.checkSchedule = function() {
         if (!plugged) {
             status += "not plugged in";
         } else if (inWindow && charging) {
-            status += "in window, already charging";
+            status += "in window, charging to " + config.targetSOC + "% (current " + soc.toFixed(0) + "%)";
         } else if (!inWindow && !charging) {
             status += "outside window (" + startDesc + " to " + stopDesc + "), not charging";
         } else {
