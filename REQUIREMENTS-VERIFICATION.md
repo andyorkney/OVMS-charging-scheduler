@@ -138,35 +138,45 @@ When requirements conflict, this hierarchy determines which wins:
 ---
 
 ### 5. Intelligent "Ready By" Scheduling (Priority #2)
-**Requirement**: Be at target SOC BY ready-by time (not necessarily exactly at, but by)
-**Hierarchy**: Second highest - overrides cheap window timing
+**Requirement**: Be at target SOC BY ready-by time, preferring cheap window start
+**Hierarchy**: Second highest - overrides cheap window timing when necessary
+
+**Logic:**
+1. **Default**: Always start at cheap window start (23:30)
+2. **Only start earlier**: If starting at 23:30 would finish AFTER ready-by deadline
+3. **Prefer finishing early**: Better to start at 23:30 and finish at 05:00 than start at 01:00 to finish exactly at 07:30
 
 **How to Verify**:
-- [ ] Set charger rate: `charging.setChargeRate(7.0)`
+- [ ] Set charger rate: `charging.setChargeRate(1.8)`
 - [ ] Set ready-by: `charging.setReadyBy(7,30)`
 - [ ] Set target: `charging.setLimits(80,75)`
-- [ ] Run: `charging.status()`
-- [ ] Check: Does "Optimal start" time make sense?
-  - Example: If need 4h charge, start should be 03:30 (or earlier if window allows)
+- [ ] Test Scenario A: Need 4h to charge
+  - Should start: 23:30 (cheap window start)
+  - Should finish: 03:30 (4h before ready-by - that's OK!)
+  - Cost: All in cheap window
+- [ ] Test Scenario B: Need 8h to charge
+  - Should start: 23:30 (cheap window start)
+  - Should finish: 07:30 (exactly at ready-by)
+  - Cost: Cheap + overflow warning
+- [ ] Test Scenario C: Need 10h to charge
+  - Should start: 21:30 (MUST start 2h before cheap window)
+  - Should finish: 07:30 (at ready-by)
+  - Cost: Pre-window + cheap + overflow warning
 
 **Expected Result**:
-- Vehicle reaches target SOC (80%) BY ready-by time (7:30)
-- May finish earlier (OK)
-- Must NOT finish late (fail)
-- May start before cheap window if needed (acceptable)
-- Shows cost warning if overflow into expensive rate
+- Vehicle reaches target SOC BY ready-by time (may finish early ✓)
+- Starts at cheap window start UNLESS would miss deadline
+- Shows pre-window cost if must start early
+- Shows overflow cost if extends beyond cheap window
+- Warns user about non-cheap charging
 
-**Important**: Ready-by time is a deadline, not an exact target. Better to finish early than late.
-- [ ] Check: Can charge percentage be reached after starting at 23:30 and ready by set-time
-  - Example: If needs to be ready at 05:00, calculates time to start to be ready by 05:00 and warns of costs and timings.
-
-**Expected Result**: Calculated start time needed to charge%, starts at that time with advisories
+**Important**: Ready-by is a deadline, not exact finish time. Prefer cheap window start over "perfect" timing.
 
 **Code Locations**:
-- `calculateOptimalStart()`: Lines 677-776
-- `checkSchedule()`: Lines 541-586
+- `calculateOptimalStart()`: Must prefer cheap window start
+- `checkSchedule()`: Starts at calculated time
 
-**Current Status**: ⚠️ UNVERIFIED
+**Current Status**: ⚠️ UNVERIFIED - Logic needs correction
 
 ---
 
