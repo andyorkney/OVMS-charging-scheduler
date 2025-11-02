@@ -305,16 +305,28 @@ exports.nextCharge = function() {
     if (socNeeded > 0) {
         msg += " (" + hoursNeeded.toFixed(1) + "h, " + kWhNeeded.toFixed(1) + " kWh)\n";
 
-        // Check for overflow
-        var optimal = calculateOptimalStart();
-        if (optimal && !optimal.fitsInWindow) {
-            var totalCost = costCheap + optimal.overflowCost;
+        // Calculate window duration
+        var windowDurationMs = stopTime.getTime() - nextStart.getTime();
+        var windowDurationHours = windowDurationMs / (1000 * 60 * 60);
+
+        // Check if charge will overflow cheap window
+        if (hoursNeeded > windowDurationHours) {
+            // Calculate overflow
+            var overflowHours = hoursNeeded - windowDurationHours;
+            var overflowKWh = overflowHours * config.chargeRateKW;
+            var overflowCost = overflowKWh * config.pricing.standard;
+
+            var cheapHours = windowDurationHours;
+            var cheapKWh = cheapHours * config.chargeRateKW;
+            var cheapCost = cheapKWh * config.pricing.cheap;
+            var totalCost = cheapCost + overflowCost;
+
             msg += "Cost: " + config.pricing.currency + totalCost.toFixed(2);
-            if (optimal.overflowCost > 0) {
-                msg += " (" + config.pricing.currency + costCheap.toFixed(2) + " cheap + " +
-                       config.pricing.currency + optimal.overflowCost.toFixed(2) + " overflow)";
-            }
+            msg += " (" + config.pricing.currency + cheapCost.toFixed(2) + " cheap + " +
+                   config.pricing.currency + overflowCost.toFixed(2) + " overflow)\n";
+            msg += "WARNING: Charge extends " + overflowHours.toFixed(1) + "h beyond cheap window";
         } else {
+            // Fits in cheap window
             msg += "Cost: " + config.pricing.currency + costCheap.toFixed(2) + " (cheap rate)";
         }
     }
