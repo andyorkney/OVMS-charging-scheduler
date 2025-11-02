@@ -108,6 +108,10 @@ var config = {
 var batteryCache = null;
 var batteryCacheExpiry = 0;
 
+// Charge session tracking (for completion summary - UX Improvement E)
+var chargeStartSOC = null;
+var chargeStartTime = null;
+
 // ============================================================================
 // MODULE INITIALIZATION
 // ============================================================================
@@ -356,6 +360,10 @@ exports.start = function() {
     var soc = getSafeMetric("v.b.soc", 0);
     print("Current SOC: " + soc.toFixed(0) + "%\n");
 
+    // Track start of charge session (for completion summary - UX Improvement E)
+    chargeStartSOC = soc;
+    chargeStartTime = new Date();
+
     // Calculate charge details for notification
     var battery = getBatteryParams();
     var socNeeded = config.targetSOC - soc;
@@ -412,6 +420,7 @@ exports.start = function() {
 
 /**
  * Stop charging
+ * UX Improvement E: Shows completion summary with duration, energy, cost
  */
 exports.stop = function() {
     print("=== Stopping Charge ===\n");
@@ -442,7 +451,53 @@ exports.stop = function() {
         PubSub.unsubscribe("ticker.60", monitorSOC);
         print("SOC monitoring stopped\n");
 
-        safeNotify("info", "charge.manual", "Stopped at " + soc.toFixed(0) + "%");
+        // UX Improvement E: Display completion summary
+        var msg = "Stopped at " + soc.toFixed(0) + "%";
+        if (chargeStartSOC !== null && chargeStartTime !== null) {
+            var socGain = soc - chargeStartSOC;
+            var durationMs = new Date().getTime() - chargeStartTime.getTime();
+            var durationHours = durationMs / (1000 * 60 * 60);
+
+            if (socGain > 0.5 && durationHours > 0.01) { // Only show if meaningful charge occurred
+                var battery = getBatteryParams();
+                var kWhCharged = (socGain / 100) * battery.usable;
+
+                // Calculate actual cost based on when charging occurred
+                var costs = calculateChargeCost(chargeStartTime, new Date(), config.chargeRateKW);
+
+                print("\n=== Charge Session Complete ===\n");
+                print("SOC: " + chargeStartSOC.toFixed(0) + "% → " + soc.toFixed(0) + "% (+" +
+                      socGain.toFixed(0) + "%)\n");
+                print("Duration: " + durationHours.toFixed(1) + " hours\n");
+                print("Energy: " + kWhCharged.toFixed(1) + " kWh\n");
+
+                if (costs.preWindowHours > 0 || costs.postWindowHours > 0) {
+                    print("Cost breakdown:\n");
+                    if (costs.preWindowHours > 0) {
+                        print("  Before window: " + config.pricing.currency + costs.preWindowCost.toFixed(2) + "\n");
+                    }
+                    if (costs.cheapHours > 0) {
+                        print("  Cheap window: " + config.pricing.currency + costs.cheapCost.toFixed(2) + "\n");
+                    }
+                    if (costs.postWindowHours > 0) {
+                        print("  After window: " + config.pricing.currency + costs.postWindowCost.toFixed(2) + "\n");
+                    }
+                    print("  Total: " + config.pricing.currency + costs.totalCost.toFixed(2) + "\n");
+                } else {
+                    print("Cost: " + config.pricing.currency + costs.totalCost.toFixed(2) + " (cheap rate)\n");
+                }
+
+                msg = "Complete: " + chargeStartSOC.toFixed(0) + "% → " + soc.toFixed(0) + "% (+" +
+                      socGain.toFixed(0) + "%), " + durationHours.toFixed(1) + "h, " +
+                      kWhCharged.toFixed(1) + " kWh, " + config.pricing.currency + costs.totalCost.toFixed(2);
+            }
+
+            // Reset session tracking
+            chargeStartSOC = null;
+            chargeStartTime = null;
+        }
+
+        safeNotify("info", "charge.manual", msg);
         return true;
     } catch (e) {
         print("Error: " + e.message + "\n");
@@ -457,6 +512,7 @@ exports.stop = function() {
 
 /**
  * Set charging SOC limits
+ * UX Improvement A: Shows smart forecast when plugged in
  */
 exports.setLimits = function(target, skipIfAbove) {
     if (target < 20 || target > 100 || skipIfAbove < 10 || skipIfAbove > 100) {
@@ -470,6 +526,59 @@ exports.setLimits = function(target, skipIfAbove) {
 
     var msg = "Target " + target + "%, skip if above " + skipIfAbove + "%";
     print(msg + "\n");
+
+    // UX Improvement A: Show forecast if plugged in
+    var plugged = getSafeMetric("v.c.pilot", false);
+    var soc = getSafeMetric("v.b.soc", 0);
+
+    if (plugged && soc < skipIfAbove) {
+        print("\n=== Next Charge Forecast ===\n");
+
+        // Calculate charge details
+        var battery = getBatteryParams();
+        var socNeeded = target - soc;
+        var kWhNeeded = (socNeeded / 100) * battery.usable;
+        var hoursNeeded = kWhNeeded / config.chargeRateKW;
+
+        // Calculate next start time
+        var now = new Date();
+        var nextStart = calculateNextStart(now);
+        var stopTime = calculateStopTime(nextStart);
+
+        print("Current SOC: " + soc.toFixed(0) + "%\n");
+        print("Will charge: " + soc.toFixed(0) + "% → " + target + "% (+" + socNeeded.toFixed(0) + "%)\n");
+        print("Energy needed: " + kWhNeeded.toFixed(1) + " kWh\n");
+        print("Charge time: " + hoursNeeded.toFixed(1) + " hours\n");
+        print("Next start: " + formatTime(nextStart) + "\n");
+        print("Target finish: " + formatTime(stopTime) + "\n");
+
+        // Calculate and display costs with overflow detection
+        var chargeEnd = new Date(nextStart.getTime() + (hoursNeeded * 60 * 60 * 1000));
+        var costs = calculateChargeCost(nextStart, chargeEnd, config.chargeRateKW);
+
+        if (costs.preWindowHours > 0 || costs.postWindowHours > 0) {
+            print("\n[COST WARNING]\n");
+            if (costs.preWindowHours > 0) {
+                print("  Before cheap window: " + costs.preWindowKWh.toFixed(1) + " kWh (" +
+                      config.pricing.currency + costs.preWindowCost.toFixed(2) + ")\n");
+            }
+            if (costs.cheapHours > 0) {
+                print("  During cheap window: " + costs.cheapKWh.toFixed(1) + " kWh (" +
+                      config.pricing.currency + costs.cheapCost.toFixed(2) + ")\n");
+            }
+            if (costs.postWindowHours > 0) {
+                print("  After cheap window: " + costs.postWindowKWh.toFixed(1) + " kWh (" +
+                      config.pricing.currency + costs.postWindowCost.toFixed(2) + ")\n");
+            }
+            print("  Total cost: " + config.pricing.currency + costs.totalCost.toFixed(2) + "\n");
+        } else {
+            print("Estimated cost: " + config.pricing.currency + costs.totalCost.toFixed(2) + " (cheap rate)\n");
+        }
+
+        msg += "\nNext: " + formatTime(nextStart) + ", " + hoursNeeded.toFixed(1) + "h, " +
+               config.pricing.currency + costs.totalCost.toFixed(2);
+    }
+
     safeNotify("info", "charge.config", msg);
 };
 
@@ -516,6 +625,7 @@ exports.setPricing = function(cheapRate, standardRate, currency) {
 
 /**
  * Set ready-by time for intelligent scheduling
+ * UX Improvement C: Shows cost breakdown and warnings
  */
 exports.setReadyBy = function(hour, minute) {
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
@@ -530,7 +640,67 @@ exports.setReadyBy = function(hour, minute) {
         var msg = "Ready by " + pad(hour) + ":" + pad(minute) +
                   ", start " + pad(optimal.hour) + ":" + pad(optimal.minute);
         print(msg + "\n");
-        print("Charge time needed: " + optimal.hoursNeeded.toFixed(1) + " hours\n");
+        print("Charge time: " + optimal.hoursNeeded.toFixed(1) + " hours (" +
+              optimal.kWhNeeded.toFixed(1) + " kWh)\n");
+
+        // Show start time context
+        var ws = config.cheapWindowStart;
+        var cheapStart = pad(ws.hour) + ":" + pad(ws.minute);
+        var we = config.cheapWindowEnd;
+        var cheapEnd = pad(we.hour) + ":" + pad(we.minute);
+
+        if (optimal.emergency) {
+            print("\n[EMERGENCY] Not enough time! Start NOW!\n");
+        } else if (optimal.startEarly) {
+            print("[INFO] Must start before cheap window (starts at " + cheapStart + ")\n");
+        } else {
+            print("[INFO] Will start at cheap window start (" + cheapStart + ")\n");
+            if (optimal.bufferHours > 0) {
+                print("Buffer time: " + optimal.bufferHours.toFixed(1) + " hours before ready-by\n");
+            }
+        }
+
+        // Calculate and display cost breakdown
+        var now = new Date();
+        var startTime = new Date();
+        startTime.setHours(optimal.hour, optimal.minute, 0, 0);
+        if (startTime <= now) {
+            startTime.setDate(startTime.getDate() + 1);
+        }
+        var endTime = new Date(startTime.getTime() + (optimal.hoursNeeded * 60 * 60 * 1000));
+        var costs = calculateChargeCost(startTime, endTime, config.chargeRateKW);
+
+        // Display cost breakdown if any overflow
+        if (costs.preWindowHours > 0 || costs.postWindowHours > 0) {
+            print("\n=== Cost Breakdown ===\n");
+            if (costs.preWindowHours > 0) {
+                print("Before cheap window: " + costs.preWindowKWh.toFixed(1) + " kWh @ " +
+                      config.pricing.currency + config.pricing.standard.toFixed(2) + "/kWh = " +
+                      config.pricing.currency + costs.preWindowCost.toFixed(2) + "\n");
+            }
+            if (costs.cheapHours > 0) {
+                print("During cheap window: " + costs.cheapKWh.toFixed(1) + " kWh @ " +
+                      config.pricing.currency + config.pricing.cheap.toFixed(2) + "/kWh = " +
+                      config.pricing.currency + costs.cheapCost.toFixed(2) + "\n");
+            }
+            if (costs.postWindowHours > 0) {
+                print("After cheap window: " + costs.postWindowKWh.toFixed(1) + " kWh @ " +
+                      config.pricing.currency + config.pricing.standard.toFixed(2) + "/kWh = " +
+                      config.pricing.currency + costs.postWindowCost.toFixed(2) + "\n");
+            }
+            print("Total: " + config.pricing.currency + costs.totalCost.toFixed(2) + "\n");
+
+            var extraCost = costs.preWindowCost + costs.postWindowCost;
+            if (extraCost > 0) {
+                print("\n[COST WARNING] Extra cost vs all-cheap: " +
+                      config.pricing.currency + extraCost.toFixed(2) + "\n");
+            }
+        } else {
+            print("Estimated cost: " + config.pricing.currency + costs.totalCost.toFixed(2) +
+                  " (all in cheap window)\n");
+        }
+
+        msg += " (" + optimal.hoursNeeded.toFixed(1) + "h)";
         safeNotify("info", "charge.config", msg);
     } else {
         safeNotify("alert", "charge.config", "Cannot calculate - check settings");
@@ -744,17 +914,85 @@ function canCharge() {
 }
 
 /**
+ * Calculate charging cost breakdown for a given time period
+ * Returns cost split between cheap window and standard rate periods
+ */
+function calculateChargeCost(startTime, endTime, chargeRateKW) {
+    // Create cheap window times for comparison
+    var cheapStart = new Date(startTime);
+    cheapStart.setHours(config.cheapWindowStart.hour, config.cheapWindowStart.minute, 0, 0);
+    if (cheapStart < startTime) {
+        cheapStart.setDate(cheapStart.getDate() + 1);
+    }
+
+    var cheapEnd = new Date(cheapStart);
+    cheapEnd.setHours(config.cheapWindowEnd.hour, config.cheapWindowEnd.minute, 0, 0);
+    if (cheapEnd <= cheapStart) {
+        cheapEnd.setDate(cheapEnd.getDate() + 1);
+    }
+
+    var totalHours = (endTime - startTime) / (1000 * 60 * 60);
+    var totalKWh = totalHours * chargeRateKW;
+
+    var preWindowHours = 0;
+    var cheapHours = 0;
+    var postWindowHours = 0;
+
+    // Calculate time before cheap window
+    if (startTime < cheapStart) {
+        preWindowHours = Math.min((cheapStart - startTime) / (1000 * 60 * 60), totalHours);
+    }
+
+    // Calculate time in cheap window
+    var chargeCheapStart = startTime > cheapStart ? startTime : cheapStart;
+    var chargeCheapEnd = endTime < cheapEnd ? endTime : cheapEnd;
+    if (chargeCheapStart < chargeCheapEnd) {
+        cheapHours = (chargeCheapEnd - chargeCheapStart) / (1000 * 60 * 60);
+    }
+
+    // Calculate time after cheap window
+    if (endTime > cheapEnd) {
+        postWindowHours = (endTime - cheapEnd) / (1000 * 60 * 60);
+    }
+
+    return {
+        preWindowHours: preWindowHours,
+        preWindowKWh: preWindowHours * chargeRateKW,
+        preWindowCost: preWindowHours * chargeRateKW * config.pricing.standard,
+        cheapHours: cheapHours,
+        cheapKWh: cheapHours * chargeRateKW,
+        cheapCost: cheapHours * chargeRateKW * config.pricing.cheap,
+        postWindowHours: postWindowHours,
+        postWindowKWh: postWindowHours * chargeRateKW,
+        postWindowCost: postWindowHours * chargeRateKW * config.pricing.standard,
+        totalCost: (preWindowHours + postWindowHours) * chargeRateKW * config.pricing.standard +
+                   cheapHours * chargeRateKW * config.pricing.cheap,
+        totalKWh: totalKWh,
+        totalHours: totalHours
+    };
+}
+
+/**
  * Get human-readable reason why charging is blocked
+ * Enhanced with more helpful error messages (UX Improvement B)
  */
 function getChargeBlockReason() {
-    if (!getSafeMetric("v.c.pilot", false)) return "not plugged in";
-    if (getSafeMetric("v.c.charging", false)) return "already charging";
+    if (!getSafeMetric("v.c.pilot", false)) {
+        return "Vehicle not plugged in\nAction: Plug in vehicle and ensure charge port is unlocked";
+    }
+    if (getSafeMetric("v.c.charging", false)) {
+        return "Vehicle is already charging";
+    }
 
     var soc = getSafeMetric("v.b.soc", 0);
-    if (soc < config.minSOCToCharge) return "SOC too low (" + soc.toFixed(0) + "%)";
-    if (soc >= config.skipIfAbove) return "SOC sufficient (" + soc.toFixed(0) + "%)";
+    if (soc < config.minSOCToCharge) {
+        return "Battery at " + soc.toFixed(0) + "% (below safe minimum of " + config.minSOCToCharge + "%)";
+    }
+    if (soc >= config.skipIfAbove) {
+        return "Battery already at " + soc.toFixed(0) + "% (above skip threshold of " + config.skipIfAbove + "%)";
+    }
 
-    return "unknown";
+    return "unknown reason";
 }
 
 /**
@@ -818,9 +1056,6 @@ function calculateOptimalStart() {
     var windowDurationMs = windowEnd.getTime() - windowStart.getTime();
     var windowDurationHours = windowDurationMs / (1000 * 60 * 60);
 
-    // Calculate optimal start time (backward from ready-by)
-    var optimalStart = new Date(readyByTime.getTime() - (minutesNeeded * 60 * 1000));
-
     var result = {
         hour: 0,
         minute: 0,
@@ -838,31 +1073,38 @@ function calculateOptimalStart() {
         emergency: false
     };
 
-    // Check if optimal start is in the past (emergency!)
-    if (optimalStart <= now) {
-        result.emergency = true;
-        result.hour = now.getHours();
-        result.minute = now.getMinutes();
-        return result;
-    }
+    // CORRECTED LOGIC (Priority #2: Ready-by scheduling)
+    // DEFAULT: Always start at cheap window start (23:30)
+    // ONLY start earlier: If starting at 23:30 would miss ready-by deadline
+    // Prefer finishing early over "perfect" timing
 
-    // LOGIC: If fits in cheap window, start early for resilience
-    if (result.fitsInWindow) {
-        // Start at window start time for maximum buffer
-        optimalStart = windowStart;
+    var optimalStart = windowStart;
+    var chargeEnd = new Date(optimalStart.getTime() + (minutesNeeded * 60 * 1000));
+
+    // Check if starting at cheap window would finish AFTER ready-by time
+    if (chargeEnd > readyByTime) {
+        // Must start earlier to meet ready-by deadline
+        optimalStart = new Date(readyByTime.getTime() - (minutesNeeded * 60 * 1000));
+
+        // Check if optimal start is in the past (emergency!)
+        if (optimalStart <= now) {
+            result.emergency = true;
+            result.hour = now.getHours();
+            result.minute = now.getMinutes();
+            return result;
+        }
+
         result.startEarly = true;
-        result.bufferHours = windowDurationHours - hoursNeeded;
-    } else {
-        // Doesn't fit - must use calculated optimal start
-        // Calculate overflow before window
+
+        // Calculate overflow before window (pre-window charging)
         if (optimalStart < windowStart) {
             var overflowBeforeMs = windowStart.getTime() - optimalStart.getTime();
             result.overflowBefore = overflowBeforeMs / (1000 * 60 * 60);
             result.overflowBeforeKWh = result.overflowBefore * config.chargeRateKW;
         }
 
-        // Calculate overflow after window
-        var chargeEnd = new Date(optimalStart.getTime() + (minutesNeeded * 60 * 1000));
+        // Calculate overflow after window (post-window charging)
+        chargeEnd = new Date(optimalStart.getTime() + (minutesNeeded * 60 * 1000));
         if (chargeEnd > windowEnd) {
             var overflowAfterMs = chargeEnd.getTime() - windowEnd.getTime();
             result.overflowAfter = overflowAfterMs / (1000 * 60 * 60);
@@ -872,6 +1114,19 @@ function calculateOptimalStart() {
         // Calculate total overflow cost
         var totalOverflowKWh = result.overflowBeforeKWh + result.overflowAfterKWh;
         result.overflowCost = totalOverflowKWh * config.pricing.standard;
+    } else {
+        // Starting at cheap window start will finish before ready-by time
+        // This is ideal - maximum buffer time
+        result.bufferHours = (readyByTime.getTime() - chargeEnd.getTime()) / (1000 * 60 * 60);
+
+        // Check if charge extends beyond cheap window end
+        if (chargeEnd > windowEnd) {
+            var overflowAfterMs = chargeEnd.getTime() - windowEnd.getTime();
+            result.overflowAfter = overflowAfterMs / (1000 * 60 * 60);
+            result.overflowAfterKWh = result.overflowAfter * config.chargeRateKW;
+            result.overflowCost = result.overflowAfterKWh * config.pricing.standard;
+            result.fitsInWindow = false;
+        }
     }
 
     result.hour = optimalStart.getHours();
