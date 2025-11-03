@@ -161,50 +161,86 @@ var mainSchedule = {
  */
 function loadPersistedConfig() {
     try {
+        var loadedCount = 0;
+
         // Load main schedule
         var startHour = OvmsConfig.Get("usr", "charging.schedule.start.hour");
-        if (startHour && startHour !== "") {
-            config.cheapWindowStart.hour = parseInt(startHour);
-            config.cheapWindowStart.minute = parseInt(OvmsConfig.Get("usr", "charging.schedule.start.minute") || "0");
-            config.cheapWindowEnd.hour = parseInt(OvmsConfig.Get("usr", "charging.schedule.end.hour") || "0");
-            config.cheapWindowEnd.minute = parseInt(OvmsConfig.Get("usr", "charging.schedule.end.minute") || "0");
-            print("[PERSISTENT] Loaded main schedule: " + pad(config.cheapWindowStart.hour) + ":" +
-                  pad(config.cheapWindowStart.minute) + " to " + pad(config.cheapWindowEnd.hour) + ":" +
-                  pad(config.cheapWindowEnd.minute) + "\n");
+        if (startHour && startHour !== "" && startHour !== "undefined") {
+            var sh = parseInt(startHour);
+            var sm = parseInt(OvmsConfig.Get("usr", "charging.schedule.start.minute") || "0");
+            var eh = parseInt(OvmsConfig.Get("usr", "charging.schedule.end.hour") || "0");
+            var em = parseInt(OvmsConfig.Get("usr", "charging.schedule.end.minute") || "0");
+
+            // Only apply if all values are valid
+            if (!isNaN(sh) && !isNaN(sm) && !isNaN(eh) && !isNaN(em)) {
+                config.cheapWindowStart.hour = sh;
+                config.cheapWindowStart.minute = sm;
+                config.cheapWindowEnd.hour = eh;
+                config.cheapWindowEnd.minute = em;
+                print("[PERSISTENT] Loaded main schedule: " + pad(sh) + ":" + pad(sm) +
+                      " to " + pad(eh) + ":" + pad(em) + "\n");
+                loadedCount++;
+            }
         }
 
         // Load ready-by (null if not set)
         var readyByHour = OvmsConfig.Get("usr", "charging.readyby.hour");
-        if (readyByHour && readyByHour !== "") {
-            config.readyBy = {
-                hour: parseInt(readyByHour),
-                minute: parseInt(OvmsConfig.Get("usr", "charging.readyby.minute") || "0")
-            };
-            print("[PERSISTENT] Loaded ready-by: " + pad(config.readyBy.hour) + ":" +
-                  pad(config.readyBy.minute) + "\n");
+        if (readyByHour && readyByHour !== "" && readyByHour !== "undefined") {
+            var rh = parseInt(readyByHour);
+            var rm = parseInt(OvmsConfig.Get("usr", "charging.readyby.minute") || "0");
+
+            if (!isNaN(rh) && !isNaN(rm)) {
+                config.readyBy = { hour: rh, minute: rm };
+                print("[PERSISTENT] Loaded ready-by: " + pad(rh) + ":" + pad(rm) + "\n");
+                loadedCount++;
+            }
         }
 
         // Load charging limits
         var targetSOC = OvmsConfig.Get("usr", "charging.target.soc");
-        if (targetSOC && targetSOC !== "") {
-            config.targetSOC = parseInt(targetSOC);
-            config.skipIfAbove = parseInt(OvmsConfig.Get("usr", "charging.skip.threshold") || "75");
+        if (targetSOC && targetSOC !== "" && targetSOC !== "undefined") {
+            var target = parseInt(targetSOC);
+            var skip = parseInt(OvmsConfig.Get("usr", "charging.skip.threshold") || "75");
+
+            if (!isNaN(target) && !isNaN(skip)) {
+                config.targetSOC = target;
+                config.skipIfAbove = skip;
+                print("[PERSISTENT] Loaded limits: target=" + target + "%, skip=" + skip + "%\n");
+                loadedCount++;
+            }
         }
 
         // Load charge rate
         var chargeRate = OvmsConfig.Get("usr", "charging.rate.kw");
-        if (chargeRate && chargeRate !== "") {
-            config.chargeRateKW = parseFloat(chargeRate);
+        if (chargeRate && chargeRate !== "" && chargeRate !== "undefined") {
+            var rate = parseFloat(chargeRate);
+
+            if (!isNaN(rate) && rate > 0) {
+                config.chargeRateKW = rate;
+                print("[PERSISTENT] Loaded charge rate: " + rate + " kW\n");
+                loadedCount++;
+            }
         }
 
         // Load pricing
         var cheapRate = OvmsConfig.Get("usr", "charging.pricing.cheap");
-        if (cheapRate && cheapRate !== "") {
-            config.pricing.cheap = parseFloat(cheapRate);
-            config.pricing.standard = parseFloat(OvmsConfig.Get("usr", "charging.pricing.standard") || "0.28");
+        if (cheapRate && cheapRate !== "" && cheapRate !== "undefined") {
+            var cheap = parseFloat(cheapRate);
+            var standard = parseFloat(OvmsConfig.Get("usr", "charging.pricing.standard") || "0.28");
             var currency = OvmsConfig.Get("usr", "charging.pricing.currency");
-            if (currency && currency !== "") {
-                config.pricing.currency = currency;
+
+            if (!isNaN(cheap) && !isNaN(standard)) {
+                config.pricing.cheap = cheap;
+                config.pricing.standard = standard;
+
+                // Only update currency if it's a valid non-empty string
+                if (currency && currency !== "" && currency !== "undefined") {
+                    config.pricing.currency = currency;
+                }
+
+                print("[PERSISTENT] Loaded pricing: " + config.pricing.currency + cheap.toFixed(2) +
+                      " cheap, " + config.pricing.currency + standard.toFixed(2) + " standard\n");
+                loadedCount++;
             }
         }
 
@@ -212,10 +248,15 @@ function loadPersistedConfig() {
         var criticalActive = OvmsConfig.Get("usr", "charging.critical.active");
         if (criticalActive === "true") {
             restoreCriticalJourney();
+            loadedCount++;
         }
 
         // Save main schedule as backup (for temp revert)
         saveMainScheduleBackup();
+
+        if (loadedCount === 0) {
+            print("[PERSISTENT] No saved config found, using defaults\n");
+        }
 
     } catch (e) {
         print("[PERSISTENCE] Error loading config: " + e.message + "\n");
