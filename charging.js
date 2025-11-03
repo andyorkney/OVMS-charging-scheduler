@@ -577,18 +577,23 @@ exports.nextCharge = function() {
     if (socNeeded > 0) {
         msg += " (" + hoursNeeded.toFixed(1) + "h, " + kWhNeeded.toFixed(1) + " kWh)\n";
 
-        // Calculate window duration
-        var windowDurationMs = stopTime.getTime() - nextStart.getTime();
-        var windowDurationHours = windowDurationMs / (1000 * 60 * 60);
+        // Calculate cheap window duration (for cost calculation)
+        var cheapWindowEnd = new Date(nextStart);
+        cheapWindowEnd.setHours(config.cheapWindowEnd.hour, config.cheapWindowEnd.minute, 0, 0);
+        if (cheapWindowEnd <= nextStart) {
+            cheapWindowEnd.setDate(cheapWindowEnd.getDate() + 1);
+        }
+        var cheapWindowMs = cheapWindowEnd.getTime() - nextStart.getTime();
+        var cheapWindowHours = cheapWindowMs / (1000 * 60 * 60);
 
         // Check if charge will overflow cheap window
-        if (hoursNeeded > windowDurationHours) {
-            // Calculate overflow
-            var overflowHours = hoursNeeded - windowDurationHours;
+        if (hoursNeeded > cheapWindowHours) {
+            // Calculate overflow beyond cheap window
+            var overflowHours = hoursNeeded - cheapWindowHours;
             var overflowKWh = overflowHours * config.chargeRateKW;
             var overflowCost = overflowKWh * config.pricing.standard;
 
-            var cheapHours = windowDurationHours;
+            var cheapHours = cheapWindowHours;
             var cheapKWh = cheapHours * config.chargeRateKW;
             var cheapCost = cheapKWh * config.pricing.cheap;
             var totalCost = cheapCost + overflowCost;
@@ -596,7 +601,8 @@ exports.nextCharge = function() {
             msg += "Cost: " + config.pricing.currency + totalCost.toFixed(2);
             msg += " (" + config.pricing.currency + cheapCost.toFixed(2) + " cheap + " +
                    config.pricing.currency + overflowCost.toFixed(2) + " overflow)\n";
-            msg += "WARNING: Charge extends " + overflowHours.toFixed(1) + "h beyond cheap window";
+            msg += "WARNING: Charge extends " + overflowHours.toFixed(1) + "h (" +
+                   overflowKWh.toFixed(1) + " kWh) beyond cheap window";
         } else {
             // Fits in cheap window
             msg += "Cost: " + config.pricing.currency + costCheap.toFixed(2) + " (cheap rate)";
