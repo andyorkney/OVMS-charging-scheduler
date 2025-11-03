@@ -121,6 +121,224 @@ var chargingSession = {
     maxPowerSeen: 0
 };
 
+// Temporary schedule tracking (auto-reverts after session)
+var tempSchedule = {
+    active: false,
+    start: null,
+    end: null
+};
+
+// Temporary ready-by tracking (may become critical)
+var tempReadyBy = {
+    active: false,
+    hour: null,
+    minute: null
+};
+
+// Critical journey state (persists through reboot)
+var criticalJourney = {
+    active: false,
+    reason: null,
+    targetSOC: null,
+    readyByHour: null,
+    readyByMinute: null
+};
+
+// Main schedule backup (for reverting from temp)
+var mainSchedule = {
+    start: null,
+    end: null,
+    readyBy: null
+};
+
+// ============================================================================
+// PERSISTENCE LAYER (OvmsConfig Integration)
+// ============================================================================
+
+/**
+ * Load persisted configuration from OvmsConfig storage
+ * Called on module initialization
+ */
+function loadPersistedConfig() {
+    try {
+        // Load main schedule
+        var startHour = OvmsConfig.GetValues("usr", "charging.schedule.start.hour");
+        if (startHour && startHour !== "") {
+            config.cheapWindowStart.hour = parseInt(startHour);
+            config.cheapWindowStart.minute = parseInt(OvmsConfig.GetValues("usr", "charging.schedule.start.minute") || "0");
+            config.cheapWindowEnd.hour = parseInt(OvmsConfig.GetValues("usr", "charging.schedule.end.hour") || "0");
+            config.cheapWindowEnd.minute = parseInt(OvmsConfig.GetValues("usr", "charging.schedule.end.minute") || "0");
+            print("[PERSISTENT] Loaded main schedule: " + pad(config.cheapWindowStart.hour) + ":" +
+                  pad(config.cheapWindowStart.minute) + " to " + pad(config.cheapWindowEnd.hour) + ":" +
+                  pad(config.cheapWindowEnd.minute) + "\n");
+        }
+
+        // Load ready-by (null if not set)
+        var readyByHour = OvmsConfig.GetValues("usr", "charging.readyby.hour");
+        if (readyByHour && readyByHour !== "") {
+            config.readyBy = {
+                hour: parseInt(readyByHour),
+                minute: parseInt(OvmsConfig.GetValues("usr", "charging.readyby.minute") || "0")
+            };
+            print("[PERSISTENT] Loaded ready-by: " + pad(config.readyBy.hour) + ":" +
+                  pad(config.readyBy.minute) + "\n");
+        }
+
+        // Load charging limits
+        var targetSOC = OvmsConfig.GetValues("usr", "charging.target.soc");
+        if (targetSOC && targetSOC !== "") {
+            config.targetSOC = parseInt(targetSOC);
+            config.skipIfAbove = parseInt(OvmsConfig.GetValues("usr", "charging.skip.threshold") || "75");
+        }
+
+        // Load charge rate
+        var chargeRate = OvmsConfig.GetValues("usr", "charging.rate.kw");
+        if (chargeRate && chargeRate !== "") {
+            config.chargeRateKW = parseFloat(chargeRate);
+        }
+
+        // Load pricing
+        var cheapRate = OvmsConfig.GetValues("usr", "charging.pricing.cheap");
+        if (cheapRate && cheapRate !== "") {
+            config.pricing.cheap = parseFloat(cheapRate);
+            config.pricing.standard = parseFloat(OvmsConfig.GetValues("usr", "charging.pricing.standard") || "0.28");
+            var currency = OvmsConfig.GetValues("usr", "charging.pricing.currency");
+            if (currency && currency !== "") {
+                config.pricing.currency = currency;
+            }
+        }
+
+        // Check for active critical journey
+        var criticalActive = OvmsConfig.GetValues("usr", "charging.critical.active");
+        if (criticalActive === "true") {
+            restoreCriticalJourney();
+        }
+
+        // Save main schedule as backup (for temp revert)
+        saveMainScheduleBackup();
+
+    } catch (e) {
+        print("[PERSISTENCE] Error loading config: " + e.message + "\n");
+        print("[PERSISTENCE] Using hardcoded defaults\n");
+    }
+}
+
+/**
+ * Persist configuration value to OvmsConfig
+ */
+function persistValue(key, value) {
+    try {
+        OvmsConfig.SetValues("usr", key, value.toString());
+    } catch (e) {
+        print("[PERSISTENCE] Error saving " + key + ": " + e.message + "\n");
+    }
+}
+
+/**
+ * Save main schedule as backup for temp revert
+ */
+function saveMainScheduleBackup() {
+    mainSchedule.start = {
+        hour: config.cheapWindowStart.hour,
+        minute: config.cheapWindowStart.minute
+    };
+    mainSchedule.end = {
+        hour: config.cheapWindowEnd.hour,
+        minute: config.cheapWindowEnd.minute
+    };
+    mainSchedule.readyBy = config.readyBy ? {
+        hour: config.readyBy.hour,
+        minute: config.readyBy.minute
+    } : null;
+}
+
+/**
+ * Restore critical journey from persistent storage
+ */
+function restoreCriticalJourney() {
+    try {
+        var targetSOC = parseInt(OvmsConfig.GetValues("usr", "charging.critical.target.soc") || "0");
+        var readyByHour = OvmsConfig.GetValues("usr", "charging.critical.readyby.hour");
+        var reason = OvmsConfig.GetValues("usr", "charging.critical.reason") || "unknown";
+
+        // Check if critical should still be active
+        var shouldRestore = false;
+
+        // Check 100% target completion (within 5% tolerance)
+        var currentSOC = getSafeMetric("v.b.soc", 0);
+        if (targetSOC === 100 && currentSOC < 95) {
+            shouldRestore = true;
+        }
+
+        // Check ready-by time hasn't passed
+        if (readyByHour && readyByHour !== "") {
+            var now = new Date();
+            var readyByTime = new Date();
+            readyByTime.setHours(parseInt(readyByHour),
+                               parseInt(OvmsConfig.GetValues("usr", "charging.critical.readyby.minute") || "0"), 0, 0);
+            if (readyByTime <= now) {
+                readyByTime.setDate(readyByTime.getDate() + 1);
+            }
+            if (now < readyByTime) {
+                shouldRestore = true;
+            }
+        }
+
+        if (shouldRestore) {
+            criticalJourney.active = true;
+            criticalJourney.reason = reason;
+            criticalJourney.targetSOC = targetSOC;
+            criticalJourney.readyByHour = readyByHour ? parseInt(readyByHour) : null;
+            criticalJourney.readyByMinute = readyByHour ?
+                parseInt(OvmsConfig.GetValues("usr", "charging.critical.readyby.minute") || "0") : null;
+
+            // Apply critical settings
+            if (targetSOC) {
+                config.targetSOC = targetSOC;
+            }
+            if (readyByHour) {
+                config.readyBy = {
+                    hour: criticalJourney.readyByHour,
+                    minute: criticalJourney.readyByMinute
+                };
+            }
+
+            print("[CRITICAL JOURNEY] Restored: " + reason + "\n");
+            if (targetSOC === 100) {
+                print("  Target: 100% (current: " + currentSOC.toFixed(0) + "%)\n");
+            }
+            if (readyByHour) {
+                print("  Ready-by: " + pad(criticalJourney.readyByHour) + ":" +
+                      pad(criticalJourney.readyByMinute) + "\n");
+            }
+        } else {
+            // Critical journey completed or expired
+            clearCriticalJourney();
+            print("[CRITICAL JOURNEY] Expired/completed, cleared\n");
+        }
+    } catch (e) {
+        print("[CRITICAL] Error restoring: " + e.message + "\n");
+    }
+}
+
+/**
+ * Clear critical journey mode
+ */
+function clearCriticalJourney() {
+    criticalJourney.active = false;
+    criticalJourney.reason = null;
+    criticalJourney.targetSOC = null;
+    criticalJourney.readyByHour = null;
+    criticalJourney.readyByMinute = null;
+
+    // Clear from persistent storage
+    persistValue("charging.critical.active", "false");
+    persistValue("charging.critical.target.soc", "");
+    persistValue("charging.critical.readyby.hour", "");
+    persistValue("charging.critical.readyby.minute", "");
+    persistValue("charging.critical.reason", "");
+}
+
 // ============================================================================
 // MODULE INITIALIZATION
 // ============================================================================
@@ -598,7 +816,11 @@ exports.setLimits = function(target, skipIfAbove) {
     config.skipIfAbove = skipIfAbove;
     invalidateBatteryCache(); // Recalculate timing with new target
 
-    var msg = "Target " + target + "%, skip if above " + skipIfAbove + "%";
+    // Persist to storage
+    persistValue("charging.target.soc", target);
+    persistValue("charging.skip.threshold", skipIfAbove);
+
+    var msg = "[PERSISTENT] Target " + target + "%, skip if above " + skipIfAbove + "%";
     print(msg + "\n");
 
     // UX Improvement A: Show forecast if plugged in
@@ -668,9 +890,12 @@ exports.setChargeRate = function(rateKW) {
     config.chargeRateKW = rateKW;
     invalidateBatteryCache(); // Recalculate timing with new rate
 
+    // Persist to storage
+    persistValue("charging.rate.kw", rateKW);
+
     var type = rateKW < 2.5 ? "granny" : rateKW < 4 ? "Type 2 slow" :
                rateKW < 10 ? "Type 2 fast" : "rapid";
-    var msg = "Charge rate: " + rateKW + " kW (" + type + ")";
+    var msg = "[PERSISTENT] Charge rate: " + rateKW + " kW (" + type + ")";
     print(msg + "\n");
     safeNotify("info", "charge.config", msg);
 };
@@ -691,7 +916,14 @@ exports.setPricing = function(cheapRate, standardRate, currency) {
         config.pricing.currency = currency;
     }
 
-    var msg = "Pricing: " + config.pricing.currency + cheapRate + " cheap, " +
+    // Persist to storage
+    persistValue("charging.pricing.cheap", cheapRate);
+    persistValue("charging.pricing.standard", standardRate);
+    if (currency) {
+        persistValue("charging.pricing.currency", currency);
+    }
+
+    var msg = "[PERSISTENT] Pricing: " + config.pricing.currency + cheapRate + " cheap, " +
               config.pricing.currency + standardRate + " standard (per kWh)";
     print(msg + "\n");
     safeNotify("info", "charge.config", msg);
@@ -708,6 +940,13 @@ exports.setReadyBy = function(hour, minute) {
     }
 
     config.readyBy = { hour: hour, minute: minute };
+
+    // Persist to storage
+    persistValue("charging.readyby.hour", hour);
+    persistValue("charging.readyby.minute", minute);
+
+    // Update main schedule backup
+    saveMainScheduleBackup();
 
     var optimal = calculateOptimalStart();
     if (optimal) {
@@ -787,9 +1026,16 @@ exports.setReadyBy = function(hour, minute) {
 exports.clearReadyBy = function() {
     config.readyBy = null;
 
+    // Clear from persistent storage
+    persistValue("charging.readyby.hour", "");
+    persistValue("charging.readyby.minute", "");
+
+    // Update main schedule backup
+    saveMainScheduleBackup();
+
     var ws = config.cheapWindowStart;
     var we = config.cheapWindowEnd;
-    var msg = "Fixed: " + pad(ws.hour) + ":" + pad(ws.minute) +
+    var msg = "[PERSISTENT] Fixed schedule: " + pad(ws.hour) + ":" + pad(ws.minute) +
               " to " + pad(we.hour) + ":" + pad(we.minute);
     print(msg + "\n");
     safeNotify("info", "charge.config", msg);
@@ -809,7 +1055,16 @@ exports.setSchedule = function(startHour, startMin, stopHour, stopMin) {
     config.cheapWindowStart = { hour: startHour, minute: startMin };
     config.cheapWindowEnd = { hour: stopHour, minute: stopMin };
 
-    var msg = "Schedule: " + pad(startHour) + ":" + pad(startMin) +
+    // Persist to storage
+    persistValue("charging.schedule.start.hour", startHour);
+    persistValue("charging.schedule.start.minute", startMin);
+    persistValue("charging.schedule.end.hour", stopHour);
+    persistValue("charging.schedule.end.minute", stopMin);
+
+    // Update main schedule backup
+    saveMainScheduleBackup();
+
+    var msg = "[PERSISTENT] Main schedule: " + pad(startHour) + ":" + pad(startMin) +
               " to " + pad(stopHour) + ":" + pad(stopMin);
     print(msg + "\n");
     safeNotify("info", "charge.config", msg);
@@ -1489,8 +1744,11 @@ PubSub.subscribe("vehicle.charge.stop", function(msg, data) {
 // INITIALIZATION
 // ============================================================================
 
+// Load persistent configuration from storage
+loadPersistedConfig();
+
 var __moduleLoadTime = Date.now() - __moduleLoadStart;
-print("OVMS Smart Charging v1.0 loaded (" + __moduleLoadTime + " ms)\n");
+print("OVMS Smart Charging v1.1 (Persistent Config) loaded (" + __moduleLoadTime + " ms)\n");
 print('Run: script eval charging.status() for full status\n');
 
 // Return the exports object for module loading
