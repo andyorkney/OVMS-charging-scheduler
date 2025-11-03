@@ -108,9 +108,18 @@ var config = {
 var batteryCache = null;
 var batteryCacheExpiry = 0;
 
-// Charge session tracking (for completion summary - UX Improvement E)
-var chargeStartSOC = null;
-var chargeStartTime = null;
+// Enhanced charge session tracking (hybrid monitoring approach)
+var chargingSession = {
+    active: false,
+    startTime: null,
+    startSOC: null,
+    startKWh: null,
+    lastPower: 0,
+    lastSOC: 0,
+    stallCount: 0,
+    stallWarnings: [],
+    maxPowerSeen: 0
+};
 
 // ============================================================================
 // MODULE INITIALIZATION
@@ -360,9 +369,16 @@ exports.start = function() {
     var soc = getSafeMetric("v.b.soc", 0);
     print("Current SOC: " + soc.toFixed(0) + "%\n");
 
-    // Track start of charge session (for completion summary - UX Improvement E)
-    chargeStartSOC = soc;
-    chargeStartTime = new Date();
+    // Initialize enhanced charge session tracking
+    chargingSession.active = true;
+    chargingSession.startTime = Date.now();
+    chargingSession.startSOC = soc;
+    chargingSession.startKWh = getSafeMetric("v.c.kwh", 0);
+    chargingSession.lastPower = 0;
+    chargingSession.lastSOC = soc;
+    chargingSession.stallCount = 0;
+    chargingSession.stallWarnings = [];
+    chargingSession.maxPowerSeen = 0;
 
     // Calculate charge details for notification
     var battery = getBatteryParams();
@@ -451,28 +467,73 @@ exports.stop = function() {
         PubSub.unsubscribe("ticker.60", monitorSOC);
         print("SOC monitoring stopped\n");
 
-        // UX Improvement E: Display completion summary
+        // Enhanced completion summary with diagnostics
         var msg = "Stopped at " + soc.toFixed(0) + "%";
-        if (chargeStartSOC !== null && chargeStartTime !== null) {
-            var socGain = soc - chargeStartSOC;
-            var durationMs = new Date().getTime() - chargeStartTime.getTime();
+        if (chargingSession.active && chargingSession.startSOC !== null) {
+            var socGain = soc - chargingSession.startSOC;
+            var durationMs = Date.now() - chargingSession.startTime;
             var durationHours = durationMs / (1000 * 60 * 60);
+            var finalKWh = getSafeMetric("v.c.kwh", 0);
+            var kwhDelivered = finalKWh - chargingSession.startKWh;
 
             if (socGain > 0.5 && durationHours > 0.01) { // Only show if meaningful charge occurred
                 var battery = getBatteryParams();
-                var kWhCharged = (socGain / 100) * battery.usable;
+                var kWhFromSOC = (socGain / 100) * battery.usable;
 
                 // Calculate actual cost based on when charging occurred
-                var costs = calculateChargeCost(chargeStartTime, new Date(), config.chargeRateKW);
+                var sessionStart = new Date(chargingSession.startTime);
+                var costs = calculateChargeCost(sessionStart, new Date(), config.chargeRateKW);
 
                 print("\n=== Charge Session Complete ===\n");
-                print("SOC: " + chargeStartSOC.toFixed(0) + "% → " + soc.toFixed(0) + "% (+" +
-                      socGain.toFixed(0) + "%)\n");
-                print("Duration: " + durationHours.toFixed(1) + " hours\n");
-                print("Energy: " + kWhCharged.toFixed(1) + " kWh\n");
+                print("SOC: " + chargingSession.startSOC.toFixed(1) + "% → " + soc.toFixed(1) + "% (+" +
+                      socGain.toFixed(1) + "%)\n");
+                print("Duration: " + durationHours.toFixed(2) + " hours (" +
+                      Math.round(durationHours * 60) + " minutes)\n");
 
+                // Show both SOC-calculated and meter-measured energy
+                print("Energy (SOC): " + kWhFromSOC.toFixed(2) + " kWh\n");
+                if (kwhDelivered > 0.01) {
+                    print("Energy (meter): " + kwhDelivered.toFixed(2) + " kWh\n");
+                    var efficiency = kWhFromSOC > 0 ? ((kWhFromSOC / kwhDelivered) * 100) : 0;
+                    if (efficiency > 0 && efficiency < 150) { // Sanity check
+                        print("Efficiency: " + efficiency.toFixed(0) + "%\n");
+                    }
+                }
+
+                // Show max power achieved
+                if (chargingSession.maxPowerSeen > 0) {
+                    print("Max power: " + chargingSession.maxPowerSeen.toFixed(2) + " kW\n");
+                    if (chargingSession.maxPowerSeen < config.chargeRateKW * 0.8) {
+                        print("  (below configured " + config.chargeRateKW + " kW - vehicle may throttle)\n");
+                    }
+                }
+
+                // Show stall warnings if any
+                if (chargingSession.stallCount > 0) {
+                    print("\n[DIAGNOSTICS]\n");
+                    print("Charging stalls detected: " + chargingSession.stallCount + "\n");
+                    for (var i = 0; i < chargingSession.stallWarnings.length && i < 5; i++) {
+                        print("  " + chargingSession.stallWarnings[i] + "\n");
+                    }
+                    print("This may explain why target SOC was not reached.\n");
+                }
+
+                // Check if target was reached
+                if (soc < config.targetSOC) {
+                    var shortfall = config.targetSOC - soc;
+                    print("\n[WARNING] Target " + config.targetSOC + "% NOT reached (short by " +
+                          shortfall.toFixed(1) + "%)\n");
+                    if (chargingSession.stallCount > 0) {
+                        print("Likely cause: Charging stalls (see diagnostics above)\n");
+                    } else if (chargingSession.maxPowerSeen < config.chargeRateKW * 0.5) {
+                        print("Likely cause: Low charging power (" +
+                              chargingSession.maxPowerSeen.toFixed(2) + " kW)\n");
+                    }
+                }
+
+                // Cost breakdown
                 if (costs.preWindowHours > 0 || costs.postWindowHours > 0) {
-                    print("Cost breakdown:\n");
+                    print("\nCost breakdown:\n");
                     if (costs.preWindowHours > 0) {
                         print("  Before window: " + config.pricing.currency + costs.preWindowCost.toFixed(2) + "\n");
                     }
@@ -487,14 +548,27 @@ exports.stop = function() {
                     print("Cost: " + config.pricing.currency + costs.totalCost.toFixed(2) + " (cheap rate)\n");
                 }
 
-                msg = "Complete: " + chargeStartSOC.toFixed(0) + "% → " + soc.toFixed(0) + "% (+" +
-                      socGain.toFixed(0) + "%), " + durationHours.toFixed(1) + "h, " +
-                      kWhCharged.toFixed(1) + " kWh, " + config.pricing.currency + costs.totalCost.toFixed(2);
+                msg = "Complete: " + chargingSession.startSOC.toFixed(0) + "% → " + soc.toFixed(0) + "% (+" +
+                      socGain.toFixed(0) + "%)";
+                if (kwhDelivered > 0.01) {
+                    msg += ", " + kwhDelivered.toFixed(2) + " kWh";
+                }
+                msg += ", " + durationHours.toFixed(1) + "h";
+                if (chargingSession.stallCount > 0) {
+                    msg += " [" + chargingSession.stallCount + " stalls]";
+                }
             }
 
             // Reset session tracking
-            chargeStartSOC = null;
-            chargeStartTime = null;
+            chargingSession.active = false;
+            chargingSession.startTime = null;
+            chargingSession.startSOC = null;
+            chargingSession.startKWh = null;
+            chargingSession.lastPower = 0;
+            chargingSession.lastSOC = 0;
+            chargingSession.stallCount = 0;
+            chargingSession.stallWarnings = [];
+            chargingSession.maxPowerSeen = 0;
         }
 
         safeNotify("info", "charge.manual", msg);
@@ -880,9 +954,10 @@ function invalidateBatteryCache() {
 }
 
 /**
- * Monitor SOC during charging and stop at target
+ * Enhanced charging monitor with power tracking and stall detection
  * Called every 60 seconds via ticker.60 subscription
  * Priority #1: Stop at target SOC
+ * Enhanced: Detect stalls, calculate accurate ETAs, track energy
  */
 function monitorSOC() {
     var charging = getSafeMetric("v.c.charging", false);
@@ -892,6 +967,89 @@ function monitorSOC() {
     if (!charging) {
         return;
     }
+
+    // Get enhanced metrics
+    var power = getSafeMetric("v.c.power", 0);           // kW - CRITICAL for stall detection
+    var kwh = getSafeMetric("v.c.kwh", 0);               // kWh delivered this session
+    var ambient = getSafeMetric("v.e.temp", null);       // Ambient temperature
+    var current = getSafeMetric("v.c.current", 0);       // Charging current
+    var voltage = getSafeMetric("v.c.voltage", 0);       // Charging voltage
+
+    // Track maximum power seen (helps detect throttling)
+    if (power > chargingSession.maxPowerSeen) {
+        chargingSession.maxPowerSeen = power;
+    }
+
+    // STALL DETECTION: Check if power dropped to zero
+    // This is the KEY diagnostic for "stopped at 05:30 without reaching target"
+    if (power < 0.1 && chargingSession.lastPower > 0.5) {
+        chargingSession.stallCount++;
+        var stallMsg = "WARNING: Charging stalled! Power dropped from " +
+                      chargingSession.lastPower.toFixed(2) + "kW to " + power.toFixed(2) +
+                      "kW (stall #" + chargingSession.stallCount + ")";
+        print(stallMsg + "\n");
+        chargingSession.stallWarnings.push(new Date().toISOString() + ": " + stallMsg);
+
+        if (chargingSession.stallCount >= 3) {
+            print("ERROR: Multiple charging stalls detected. Charging appears to have failed.\n");
+            print("Possible causes: Grid issue, vehicle limiting charge, charger fault\n");
+            safeNotify("alert", "charge.stall", "Charging stalled " + chargingSession.stallCount +
+                      " times. Check vehicle/charger.");
+        }
+    }
+
+    // Calculate actual charging progress
+    var socGained = soc - chargingSession.startSOC;
+    var kwhDelivered = chargingSession.startKWh !== null ? (kwh - chargingSession.startKWh) : 0;
+    var elapsedMs = Date.now() - chargingSession.startTime;
+    var elapsedHours = elapsedMs / (1000 * 60 * 60);
+
+    // Calculate time to target based on ACTUAL power
+    var socRemaining = config.targetSOC - soc;
+    var battery = getBatteryParams();
+    var kwhRemaining = (socRemaining / 100) * battery.usable;
+    var hoursRemaining = (power > 0.1) ? (kwhRemaining / power) : 999;
+    var minutesRemaining = Math.round(hoursRemaining * 60);
+
+    // Build status message
+    var status = "SOC: " + soc.toFixed(1) + "% (+" + socGained.toFixed(1) + "%), " +
+                "Power: " + power.toFixed(2) + "kW";
+
+    if (kwhDelivered > 0.01) {
+        status += ", Energy: " + kwhDelivered.toFixed(2) + "kWh";
+    }
+
+    if (power > 0.1) {
+        status += ", ETA: " + minutesRemaining + " min";
+    } else {
+        status += ", ETA: Unknown (no power)";
+    }
+
+    if (ambient !== null) {
+        status += ", Temp: " + ambient.toFixed(1) + "C";
+    }
+
+    if (current > 0) {
+        status += ", " + current.toFixed(1) + "A @ " + voltage.toFixed(0) + "V";
+    }
+
+    print(status + "\n");
+
+    // LOW POWER WARNING: Detect if charging slower than expected
+    if (power > 0 && power < (config.chargeRateKW * 0.5) && chargingSession.maxPowerSeen > 1.0) {
+        print("INFO: Charging at " + power.toFixed(2) + "kW (below configured " +
+              config.chargeRateKW + "kW). Vehicle may be throttling.\n");
+    }
+
+    // SOC NOT INCREASING WARNING
+    if (elapsedHours > 0.1 && socGained < 0.5 && power > 0.5) {
+        print("WARNING: SOC not increasing despite " + power.toFixed(2) +
+              "kW charging power. Check SOC readings.\n");
+    }
+
+    // Update tracking
+    chargingSession.lastPower = power;
+    chargingSession.lastSOC = soc;
 
     // Check if target SOC reached
     if (soc >= config.targetSOC) {
@@ -1230,6 +1388,101 @@ function pad(num) {
 // Handle automatic stop event
 PubSub.subscribe("usr.charge.stop", function(msg, data) {
     exports.stop();
+});
+
+// HYBRID MONITORING: Auto-start ticker monitoring when vehicle reports charge start
+PubSub.subscribe("vehicle.charge.start", function(msg, data) {
+    print("[VEHICLE EVENT] Charging started\n");
+
+    // Initialize session tracking if not already done
+    if (!chargingSession.active) {
+        var soc = getSafeMetric("v.b.soc", 0);
+        chargingSession.active = true;
+        chargingSession.startTime = Date.now();
+        chargingSession.startSOC = soc;
+        chargingSession.startKWh = getSafeMetric("v.c.kwh", 0);
+        chargingSession.lastPower = 0;
+        chargingSession.lastSOC = soc;
+        chargingSession.stallCount = 0;
+        chargingSession.stallWarnings = [];
+        chargingSession.maxPowerSeen = 0;
+
+        print("Session tracking initialized: " + soc.toFixed(1) + "% SOC, target " +
+              config.targetSOC + "%\n");
+    }
+
+    // Start ticker.60 monitoring
+    PubSub.subscribe("ticker.60", monitorSOC);
+    print("Enhanced monitoring active (ticker.60)\n");
+});
+
+// HYBRID MONITORING: Auto-stop ticker monitoring and show summary when vehicle reports charge stop
+PubSub.subscribe("vehicle.charge.stop", function(msg, data) {
+    print("[VEHICLE EVENT] Charging stopped\n");
+
+    // Unsubscribe from ticker monitoring
+    PubSub.unsubscribe("ticker.60", monitorSOC);
+
+    // Show completion summary if we have session data
+    if (chargingSession.active && chargingSession.startSOC !== null) {
+        var soc = getSafeMetric("v.b.soc", 0);
+        var socGain = soc - chargingSession.startSOC;
+        var durationMs = Date.now() - chargingSession.startTime;
+        var durationHours = durationMs / (1000 * 60 * 60);
+        var finalKWh = getSafeMetric("v.c.kwh", 0);
+        var kwhDelivered = finalKWh - chargingSession.startKWh;
+
+        if (durationHours > 0.01) {
+            print("\n=== Charging Session Summary ===\n");
+            print("SOC: " + chargingSession.startSOC.toFixed(1) + "% → " + soc.toFixed(1) + "% (+" +
+                  socGain.toFixed(1) + "%)\n");
+            print("Duration: " + Math.round(durationHours * 60) + " minutes\n");
+
+            if (kwhDelivered > 0.01) {
+                print("Energy: " + kwhDelivered.toFixed(2) + " kWh\n");
+            }
+
+            if (chargingSession.maxPowerSeen > 0) {
+                print("Max power: " + chargingSession.maxPowerSeen.toFixed(2) + " kW\n");
+            }
+
+            // Check if target reached
+            if (soc >= config.targetSOC) {
+                print("Target " + config.targetSOC + "% reached ✓\n");
+            } else {
+                var shortfall = config.targetSOC - soc;
+                print("[WARNING] Target " + config.targetSOC + "% NOT reached (short by " +
+                      shortfall.toFixed(1) + "%)\n");
+
+                if (chargingSession.stallCount > 0) {
+                    print("Detected " + chargingSession.stallCount + " charging stall(s)\n");
+                    print("This may explain why target was not reached.\n");
+                }
+            }
+
+            // Send notification
+            var notifMsg = "Charging stopped: " + chargingSession.startSOC.toFixed(0) + "% → " +
+                          soc.toFixed(0) + "%";
+            if (kwhDelivered > 0.01) {
+                notifMsg += ", " + kwhDelivered.toFixed(2) + " kWh";
+            }
+            if (chargingSession.stallCount > 0) {
+                notifMsg += " [" + chargingSession.stallCount + " stalls detected]";
+            }
+            safeNotify("info", "charge.auto", notifMsg);
+        }
+
+        // Reset session
+        chargingSession.active = false;
+        chargingSession.startTime = null;
+        chargingSession.startSOC = null;
+        chargingSession.startKWh = null;
+        chargingSession.lastPower = 0;
+        chargingSession.lastSOC = 0;
+        chargingSession.stallCount = 0;
+        chargingSession.stallWarnings = [];
+        chargingSession.maxPowerSeen = 0;
+    }
 });
 
 // ============================================================================
