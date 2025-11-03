@@ -112,6 +112,9 @@ var batteryCacheExpiry = 0;
 var chargeStartSOC = null;
 var chargeStartTime = null;
 
+// SOC monitoring throttle (ticker.10 fires every 10s, check SOC every 60s = every 6th tick)
+var socMonitorTickCount = 0;
+
 // ============================================================================
 // MODULE INITIALIZATION
 // ============================================================================
@@ -383,9 +386,11 @@ exports.start = function() {
             return false;
         }
 
-        // Subscribe to ticker.60 for SOC monitoring (Priority #1: Stop at target SOC)
+        // Subscribe to ticker.10 for SOC monitoring (Priority #1: Stop at target SOC)
+        // Note: ticker.10 fires every 10s, but we throttle to check SOC every 60s
         print("Starting SOC monitoring (checking every 60 seconds)\n");
-        PubSub.subscribe("ticker.60", monitorSOC);
+        socMonitorTickCount = 0;  // Reset counter
+        PubSub.subscribe("ticker.10", monitorSOC);
 
         // Build detailed notification with cost/time estimates
         var msg = "Charging started: " + soc.toFixed(0) + "% → " + config.targetSOC + "%\n";
@@ -448,7 +453,7 @@ exports.stop = function() {
         }
 
         // Unsubscribe from SOC monitoring
-        PubSub.unsubscribe("ticker.60", monitorSOC);
+        PubSub.unsubscribe("ticker.10", monitorSOC);
         print("SOC monitoring stopped\n");
 
         // UX Improvement E: Display completion summary
@@ -881,10 +886,17 @@ function invalidateBatteryCache() {
 
 /**
  * Monitor SOC during charging and stop at target
- * Called every 60 seconds via ticker.60 subscription
+ * Called every 10 seconds via ticker.10 subscription, but throttled to check every 60s
  * Priority #1: Stop at target SOC
  */
 function monitorSOC() {
+    // Throttle: only check every 6th tick (60 seconds)
+    socMonitorTickCount++;
+    if (socMonitorTickCount < 6) {
+        return;
+    }
+    socMonitorTickCount = 0;  // Reset counter
+
     var charging = getSafeMetric("v.c.charging", false);
     var soc = getSafeMetric("v.b.soc", 0);
 
