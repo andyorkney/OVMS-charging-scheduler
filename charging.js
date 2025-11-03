@@ -162,54 +162,54 @@ var mainSchedule = {
 function loadPersistedConfig() {
     try {
         // Load main schedule
-        var startHour = OvmsConfig.GetValues("usr", "charging.schedule.start.hour");
+        var startHour = OvmsConfig.GetParam("usr", "charging.schedule.start.hour");
         if (startHour && startHour !== "") {
             config.cheapWindowStart.hour = parseInt(startHour);
-            config.cheapWindowStart.minute = parseInt(OvmsConfig.GetValues("usr", "charging.schedule.start.minute") || "0");
-            config.cheapWindowEnd.hour = parseInt(OvmsConfig.GetValues("usr", "charging.schedule.end.hour") || "0");
-            config.cheapWindowEnd.minute = parseInt(OvmsConfig.GetValues("usr", "charging.schedule.end.minute") || "0");
+            config.cheapWindowStart.minute = parseInt(OvmsConfig.GetParam("usr", "charging.schedule.start.minute") || "0");
+            config.cheapWindowEnd.hour = parseInt(OvmsConfig.GetParam("usr", "charging.schedule.end.hour") || "0");
+            config.cheapWindowEnd.minute = parseInt(OvmsConfig.GetParam("usr", "charging.schedule.end.minute") || "0");
             print("[PERSISTENT] Loaded main schedule: " + pad(config.cheapWindowStart.hour) + ":" +
                   pad(config.cheapWindowStart.minute) + " to " + pad(config.cheapWindowEnd.hour) + ":" +
                   pad(config.cheapWindowEnd.minute) + "\n");
         }
 
         // Load ready-by (null if not set)
-        var readyByHour = OvmsConfig.GetValues("usr", "charging.readyby.hour");
+        var readyByHour = OvmsConfig.GetParam("usr", "charging.readyby.hour");
         if (readyByHour && readyByHour !== "") {
             config.readyBy = {
                 hour: parseInt(readyByHour),
-                minute: parseInt(OvmsConfig.GetValues("usr", "charging.readyby.minute") || "0")
+                minute: parseInt(OvmsConfig.GetParam("usr", "charging.readyby.minute") || "0")
             };
             print("[PERSISTENT] Loaded ready-by: " + pad(config.readyBy.hour) + ":" +
                   pad(config.readyBy.minute) + "\n");
         }
 
         // Load charging limits
-        var targetSOC = OvmsConfig.GetValues("usr", "charging.target.soc");
+        var targetSOC = OvmsConfig.GetParam("usr", "charging.target.soc");
         if (targetSOC && targetSOC !== "") {
             config.targetSOC = parseInt(targetSOC);
-            config.skipIfAbove = parseInt(OvmsConfig.GetValues("usr", "charging.skip.threshold") || "75");
+            config.skipIfAbove = parseInt(OvmsConfig.GetParam("usr", "charging.skip.threshold") || "75");
         }
 
         // Load charge rate
-        var chargeRate = OvmsConfig.GetValues("usr", "charging.rate.kw");
+        var chargeRate = OvmsConfig.GetParam("usr", "charging.rate.kw");
         if (chargeRate && chargeRate !== "") {
             config.chargeRateKW = parseFloat(chargeRate);
         }
 
         // Load pricing
-        var cheapRate = OvmsConfig.GetValues("usr", "charging.pricing.cheap");
+        var cheapRate = OvmsConfig.GetParam("usr", "charging.pricing.cheap");
         if (cheapRate && cheapRate !== "") {
             config.pricing.cheap = parseFloat(cheapRate);
-            config.pricing.standard = parseFloat(OvmsConfig.GetValues("usr", "charging.pricing.standard") || "0.28");
-            var currency = OvmsConfig.GetValues("usr", "charging.pricing.currency");
+            config.pricing.standard = parseFloat(OvmsConfig.GetParam("usr", "charging.pricing.standard") || "0.28");
+            var currency = OvmsConfig.GetParam("usr", "charging.pricing.currency");
             if (currency && currency !== "") {
                 config.pricing.currency = currency;
             }
         }
 
         // Check for active critical journey
-        var criticalActive = OvmsConfig.GetValues("usr", "charging.critical.active");
+        var criticalActive = OvmsConfig.GetParam("usr", "charging.critical.active");
         if (criticalActive === "true") {
             restoreCriticalJourney();
         }
@@ -228,7 +228,7 @@ function loadPersistedConfig() {
  */
 function persistValue(key, value) {
     try {
-        OvmsConfig.SetValues("usr", key, value.toString());
+        OvmsConfig.SetParam("usr", key, value.toString());
     } catch (e) {
         print("[PERSISTENCE] Error saving " + key + ": " + e.message + "\n");
     }
@@ -257,9 +257,9 @@ function saveMainScheduleBackup() {
  */
 function restoreCriticalJourney() {
     try {
-        var targetSOC = parseInt(OvmsConfig.GetValues("usr", "charging.critical.target.soc") || "0");
-        var readyByHour = OvmsConfig.GetValues("usr", "charging.critical.readyby.hour");
-        var reason = OvmsConfig.GetValues("usr", "charging.critical.reason") || "unknown";
+        var targetSOC = parseInt(OvmsConfig.GetParam("usr", "charging.critical.target.soc") || "0");
+        var readyByHour = OvmsConfig.GetParam("usr", "charging.critical.readyby.hour");
+        var reason = OvmsConfig.GetParam("usr", "charging.critical.reason") || "unknown";
 
         // Check if critical should still be active
         var shouldRestore = false;
@@ -275,7 +275,7 @@ function restoreCriticalJourney() {
             var now = new Date();
             var readyByTime = new Date();
             readyByTime.setHours(parseInt(readyByHour),
-                               parseInt(OvmsConfig.GetValues("usr", "charging.critical.readyby.minute") || "0"), 0, 0);
+                               parseInt(OvmsConfig.GetParam("usr", "charging.critical.readyby.minute") || "0"), 0, 0);
             if (readyByTime <= now) {
                 readyByTime.setDate(readyByTime.getDate() + 1);
             }
@@ -290,7 +290,7 @@ function restoreCriticalJourney() {
             criticalJourney.targetSOC = targetSOC;
             criticalJourney.readyByHour = readyByHour ? parseInt(readyByHour) : null;
             criticalJourney.readyByMinute = readyByHour ?
-                parseInt(OvmsConfig.GetValues("usr", "charging.critical.readyby.minute") || "0") : null;
+                parseInt(OvmsConfig.GetParam("usr", "charging.critical.readyby.minute") || "0") : null;
 
             // Apply critical settings
             if (targetSOC) {
