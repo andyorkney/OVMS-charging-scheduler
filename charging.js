@@ -1220,13 +1220,34 @@ exports.checkSchedule = function() {
                   "% (already charged enough)\n");
         }
     } else if (!inWindow && charging) {
-        // Outside charging window but still charging - stop
-        print("Auto-stop: Outside charging window (after " + stopDesc + ")\n");
-        print("  Current time: " + now.getHours() + ":" + pad(now.getMinutes()) +
-              " (" + currentMinutes + " min), Window: " + startDesc + " to " + stopDesc +
-              " (" + startMinutes + "-" + stopMinutes + " min)\n");
-        print("  SOC: " + soc.toFixed(0) + "%, Target: " + config.targetSOC + "%\n");
-        exports.stop();
+        // Outside charging window but still charging - check if we should stop
+        // IMPORTANT: In ready-by mode, only stop if PAST the deadline, not before optimal start
+        var shouldStop = false;
+
+        if (config.readyBy) {
+            // Ready-by mode: Only stop if we're PAST the ready-by deadline
+            // Don't stop just because we're before the "optimal start time"
+            if (currentMinutes > stopMinutes) {
+                shouldStop = true;
+                print("Auto-stop: Past ready-by deadline (" + stopDesc + ")\n");
+            } else {
+                // Before deadline - keep charging even if before "optimal start"
+                print("Info: Charging before optimal start time, but keeping charge active (ready-by " +
+                      stopDesc + " not yet reached)\n");
+            }
+        } else {
+            // Fixed schedule mode: Stop if past window end time
+            shouldStop = true;
+            print("Auto-stop: Outside charging window (after " + stopDesc + ")\n");
+        }
+
+        if (shouldStop) {
+            print("  Current time: " + now.getHours() + ":" + pad(now.getMinutes()) +
+                  " (" + currentMinutes + " min), Window: " + startDesc + " to " + stopDesc +
+                  " (" + startMinutes + "-" + stopMinutes + " min)\n");
+            print("  SOC: " + soc.toFixed(0) + "%, Target: " + config.targetSOC + "%\n");
+            exports.stop();
+        }
     } else {
         // No action needed - print status so user knows it ran
         var status = "No action: ";
