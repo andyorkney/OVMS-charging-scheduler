@@ -121,6 +121,12 @@ var chargingSession = {
     maxPowerSeen: 0
 };
 
+// Manual charge mode tracking (charges to 100%, ignores schedule)
+var manualChargeActive = false;
+
+// Track if WE initiated the charge (vs vehicle auto-start on plug-in)
+var scheduledChargeActive = false;
+
 // Temporary schedule tracking (auto-reverts after session)
 var tempSchedule = {
     active: false,
@@ -616,15 +622,30 @@ exports.nextCharge = function() {
 
 /**
  * Start charging with safety checks
+ * MANUAL MODE (default): Charges to 100%, ignores schedule
+ * SCHEDULED MODE (internal): Charges to config.targetSOC, follows schedule
+ * @param {boolean} isScheduled - true if called by scheduler (internal use only)
  */
-exports.start = function() {
-    print("=== Starting Charge ===\n");
+exports.start = function(isScheduled) {
+    if (isScheduled) {
+        print("=== Starting Scheduled Charge ===\n");
+        scheduledChargeActive = true;
+    } else {
+        print("=== Starting Manual Charge ===\n");
+        print("[MANUAL MODE] Charging to 100%, ignoring schedule\n");
+        manualChargeActive = true;
+    }
 
     // Safety checks
     if (!canCharge()) {
         var reason = getChargeBlockReason();
         print("Cannot start: " + reason + "\n");
         safeNotify("alert", "charge.manual", "Cannot start: " + reason);
+        if (isScheduled) {
+            scheduledChargeActive = false;
+        } else {
+            manualChargeActive = false;
+        }
         return false;
     }
 
@@ -644,10 +665,27 @@ exports.start = function() {
 
     // Calculate charge details for notification
     var battery = getBatteryParams();
-    var socNeeded = config.targetSOC - soc;
+    var targetSOC = isScheduled ? config.targetSOC : 100;  // Manual = 100%, Scheduled = config
+    var socNeeded = targetSOC - soc;
     var kWhNeeded = (socNeeded / 100) * battery.usable;
     var hoursNeeded = kWhNeeded / config.chargeRateKW;
+
+    // Check if we're in cheap window (only relevant for manual mode)
+    var now = new Date();
+    var currentMinutes = now.getHours() * 60 + now.getMinutes();
+    var cheapStartMin = config.cheapWindowStart.hour * 60 + config.cheapWindowStart.minute;
+    var cheapEndMin = config.cheapWindowEnd.hour * 60 + config.cheapWindowEnd.minute;
+
+    var inCheapWindow = false;
+    if (cheapStartMin > cheapEndMin) {
+        // Overnight window
+        inCheapWindow = (currentMinutes >= cheapStartMin || currentMinutes < cheapEndMin);
+    } else {
+        inCheapWindow = (currentMinutes >= cheapStartMin && currentMinutes < cheapEndMin);
+    }
+
     var costCheap = kWhNeeded * config.pricing.cheap;
+    var costStandard = kWhNeeded * config.pricing.standard;
 
     try {
         var result = OvmsCommand.Exec("charge start");
@@ -658,40 +696,59 @@ exports.start = function() {
                        result.toLowerCase().indexOf("fail") !== -1)) {
             print("Command returned error status\n");
             safeNotify("alert", "charge.manual", "Start command failed: " + result);
+            manualChargeActive = false;  // Reset flag on failure
             return false;
         }
 
-        // Subscribe to ticker.60 for SOC monitoring (Priority #1: Stop at target SOC)
+        // Subscribe to ticker.60 for SOC monitoring
         print("Starting SOC monitoring (checking every 60 seconds)\n");
         PubSub.subscribe("ticker.60", monitorSOC);
 
         // Build detailed notification with cost/time estimates
-        var msg = "Charging started: " + soc.toFixed(0) + "% → " + config.targetSOC + "%\n";
-        msg += "Time: " + hoursNeeded.toFixed(1) + "h (" + kWhNeeded.toFixed(1) + " kWh)\n";
-
-        // Check for overflow into expensive rate
-        var optimal = calculateOptimalStart();
-        if (optimal && !optimal.fitsInWindow && !optimal.emergency) {
-            var totalCost = costCheap + optimal.overflowCost;
-            msg += "Cost: " + config.pricing.currency + totalCost.toFixed(2);
-            msg += " (" + config.pricing.currency + costCheap.toFixed(2) + " cheap";
-            if (optimal.overflowCost > 0) {
-                msg += " + " + config.pricing.currency + optimal.overflowCost.toFixed(2) + " overflow)";
-            } else {
-                msg += ")";
-            }
-        } else {
+        var msg;
+        if (isScheduled) {
+            // Scheduled charge notification
+            msg = "Charging started: " + soc.toFixed(0) + "% → " + config.targetSOC + "%\n";
+            msg += "Time: " + hoursNeeded.toFixed(1) + "h (" + kWhNeeded.toFixed(1) + " kWh)\n";
             msg += "Cost: " + config.pricing.currency + costCheap.toFixed(2) + " (cheap rate)";
+            print("Target: " + config.targetSOC + "%, Time: " + hoursNeeded.toFixed(1) + "h, Cost: " +
+                  config.pricing.currency + costCheap.toFixed(2) + "\n");
+            safeNotify("info", "charge.schedule", msg);
+        } else {
+            // Manual charge notification with cost warning
+            msg = "[MANUAL] Charging to 100%: " + soc.toFixed(0) + "% → 100%\n";
+            msg += "Time: " + hoursNeeded.toFixed(1) + "h (" + kWhNeeded.toFixed(1) + " kWh)\n";
+
+            // Show cost with warning if outside cheap window
+            if (!inCheapWindow) {
+                msg += "[WARNING] Outside cheap window!\n";
+                msg += "Cost: " + config.pricing.currency + costStandard.toFixed(2) + " (standard rate)\n";
+                msg += "Cheap rate would be: " + config.pricing.currency + costCheap.toFixed(2) + "\n";
+                msg += "Extra cost: " + config.pricing.currency + (costStandard - costCheap).toFixed(2);
+                print("\n[COST WARNING] Charging outside cheap window\n");
+                print("  Standard rate cost: " + config.pricing.currency + costStandard.toFixed(2) + "\n");
+                print("  Cheap rate cost: " + config.pricing.currency + costCheap.toFixed(2) + "\n");
+                print("  Extra cost: " + config.pricing.currency + (costStandard - costCheap).toFixed(2) + "\n");
+            } else {
+                msg += "Cost: " + config.pricing.currency + costCheap.toFixed(2) + " (cheap rate)";
+                print("Cost: " + config.pricing.currency + costCheap.toFixed(2) + " (cheap rate)\n");
+            }
+
+            print("\nManual mode active - scheduler will not interfere\n");
+            print("Charge will stop at 100% or when manually stopped\n");
+            safeNotify("info", "charge.manual", msg);
         }
 
-        safeNotify("info", "charge.schedule", msg);
-
-        // Schedule automatic stop at window end time (fallback)
-        scheduleStop();
         return true;
     } catch (e) {
         print("Error: " + e.message + "\n");
         safeNotify("alert", "charge.manual", "Start failed: " + e.message);
+        // Reset flags on error
+        if (isScheduled) {
+            scheduledChargeActive = false;
+        } else {
+            manualChargeActive = false;
+        }
         return false;
     }
 };
@@ -1140,6 +1197,12 @@ exports.getSchedule = function() {
  * Checks current time and starts/stops charging as needed
  */
 exports.checkSchedule = function() {
+    // Skip scheduler logic if manual charge is active
+    if (manualChargeActive) {
+        print("Manual charge active - scheduler skipped\n");
+        return;
+    }
+
     var now = new Date();
     var currentMinutes = now.getHours() * 60 + now.getMinutes();
 
@@ -1160,7 +1223,7 @@ exports.checkSchedule = function() {
             if (optimal.emergency && !charging && plugged && soc < config.skipIfAbove) {
                 print("[EMERGENCY] Not enough time to reach target! Starting immediately.\n");
                 print("  Need " + optimal.hoursNeeded.toFixed(1) + "h, deadline imminent\n");
-                exports.start();
+                exports.start(true);  // true = scheduled charge
                 return; // Exit early, emergency overrides all
             }
 
@@ -1214,7 +1277,7 @@ exports.checkSchedule = function() {
         if (soc < config.skipIfAbove) {
             print("Auto-start: In window (" + startDesc + " to " + stopDesc +
                   "), SOC " + soc.toFixed(0) + "% < " + config.skipIfAbove + "%\n");
-            exports.start();
+            exports.start(true);  // true = scheduled charge
         } else {
             print("Skip: SOC " + soc.toFixed(0) + "% >= " + config.skipIfAbove +
                   "% (already charged enough)\n");
@@ -1329,7 +1392,9 @@ function monitorSOC() {
     var elapsedHours = elapsedMs / (1000 * 60 * 60);
 
     // Calculate time to target based on ACTUAL power
-    var socRemaining = config.targetSOC - soc;
+    // In manual mode, target is always 100%
+    var targetSOC = manualChargeActive ? 100 : config.targetSOC;
+    var socRemaining = targetSOC - soc;
     var battery = getBatteryParams();
     var kwhRemaining = (socRemaining / 100) * battery.usable;
     var hoursRemaining = (power > 0.1) ? (kwhRemaining / power) : 999;
@@ -1375,9 +1440,14 @@ function monitorSOC() {
     chargingSession.lastPower = power;
     chargingSession.lastSOC = soc;
 
-    // Check if target SOC reached
-    if (soc >= config.targetSOC) {
-        print("Target SOC reached: " + soc.toFixed(1) + "% >= " + config.targetSOC + "%\n");
+    // Check if target SOC reached (100% in manual mode, config.targetSOC otherwise)
+    var targetSOC = manualChargeActive ? 100 : config.targetSOC;
+    if (soc >= targetSOC) {
+        if (manualChargeActive) {
+            print("Manual charge complete: " + soc.toFixed(1) + "% (target: 100%)\n");
+        } else {
+            print("Target SOC reached: " + soc.toFixed(1) + "% >= " + targetSOC + "%\n");
+        }
         exports.stop();
     }
 }
@@ -1733,6 +1803,57 @@ PubSub.subscribe("vehicle.charge.start", function(msg, data) {
 
         print("Session tracking initialized: " + soc.toFixed(1) + "% SOC, target " +
               config.targetSOC + "%\n");
+
+        // PLUG-IN AUTO-STOP: If we didn't start this charge, it's a vehicle auto-start
+        // Check if we should stop it and wait for scheduled window
+        if (!manualChargeActive && !scheduledChargeActive) {
+            print("[PLUG-IN DETECTED] Vehicle auto-started charging\n");
+
+            // Calculate if we're in the scheduled window
+            var now = new Date();
+            var currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+            // Get scheduled start time
+            var startMinutes;
+            if (config.readyBy) {
+                var optimal = calculateOptimalStart();
+                startMinutes = optimal ? (optimal.hour * 60 + optimal.minute) :
+                                        (config.cheapWindowStart.hour * 60 + config.cheapWindowStart.minute);
+            } else {
+                startMinutes = config.cheapWindowStart.hour * 60 + config.cheapWindowStart.minute;
+            }
+
+            // Calculate time until scheduled start
+            var minutesUntilStart;
+            if (startMinutes > currentMinutes) {
+                minutesUntilStart = startMinutes - currentMinutes;
+            } else {
+                // Start time is tomorrow
+                minutesUntilStart = (1440 - currentMinutes) + startMinutes;
+            }
+
+            // If more than 30 minutes until start, stop the charge
+            if (minutesUntilStart > 30) {
+                var startHour = Math.floor(startMinutes / 60);
+                var startMin = startMinutes % 60;
+                var msg = "Charge stopped - waiting for scheduled start at " +
+                         pad(startHour) + ":" + pad(startMin) +
+                         " (in " + minutesUntilStart + " min)";
+                print("[AUTO-STOP] " + msg + "\n");
+
+                // Schedule stop in 5 minutes (allows vehicle to settle)
+                setTimeout(function() {
+                    var stillCharging = getSafeMetric("v.c.charging", false);
+                    if (stillCharging && !manualChargeActive && !scheduledChargeActive) {
+                        print("[AUTO-STOP] Stopping plug-in auto-charge\n");
+                        exports.stop();
+                        safeNotify("info", "charge.auto", msg);
+                    }
+                }, 5 * 60 * 1000);  // 5 minutes
+            } else {
+                print("[PLUG-IN] Within 30 min of scheduled start - keeping charge active\n");
+            }
+        }
     }
 
     // Start ticker.60 monitoring
@@ -1743,6 +1864,15 @@ PubSub.subscribe("vehicle.charge.start", function(msg, data) {
 // HYBRID MONITORING: Auto-stop ticker monitoring and show summary when vehicle reports charge stop
 PubSub.subscribe("vehicle.charge.stop", function(msg, data) {
     print("[VEHICLE EVENT] Charging stopped\n");
+
+    // Clear charge mode flags
+    if (manualChargeActive) {
+        print("[MANUAL MODE] Charge complete - reverting to scheduled operation\n");
+        manualChargeActive = false;
+    }
+    if (scheduledChargeActive) {
+        scheduledChargeActive = false;
+    }
 
     // Unsubscribe from ticker monitoring
     PubSub.unsubscribe("ticker.60", monitorSOC);
