@@ -413,16 +413,13 @@ function getBatteryParams() {
         // Try to detect battery capacity from CAC (Capacity Amp-Hours)
         if (!capacity && OvmsMetrics.HasValue("v.b.cac")) {
             var cac = OvmsMetrics.AsFloat("v.b.cac");
-            var voltage = 360; // Default nominal voltage
 
-            // Get actual pack voltage if available
-            if (OvmsMetrics.HasValue("v.b.voltage")) {
-                voltage = OvmsMetrics.AsFloat("v.b.voltage");
-            } else if (OvmsMetrics.HasValue("xnl.v.b.voltage.max")) {
-                voltage = OvmsMetrics.AsFloat("xnl.v.b.voltage.max");
-            }
+            // IMPORTANT: Always use NOMINAL voltage (360V for Leaf)
+            // Do NOT use current pack voltage (v.b.voltage) as it varies with SOC/charge state
+            // Using current voltage would make capacity calculations vary during charging!
+            var nominalVoltage = 360; // Nissan Leaf nominal pack voltage
 
-            capacity = (cac * voltage) / 1000;
+            capacity = (cac * nominalVoltage) / 1000;
         }
 
         // Try to detect State of Health
@@ -1225,6 +1222,10 @@ exports.checkSchedule = function() {
     } else if (!inWindow && charging) {
         // Outside charging window but still charging - stop
         print("Auto-stop: Outside charging window (after " + stopDesc + ")\n");
+        print("  Current time: " + now.getHours() + ":" + pad(now.getMinutes()) +
+              " (" + currentMinutes + " min), Window: " + startDesc + " to " + stopDesc +
+              " (" + startMinutes + "-" + stopMinutes + " min)\n");
+        print("  SOC: " + soc.toFixed(0) + "%, Target: " + config.targetSOC + "%\n");
         exports.stop();
     } else {
         // No action needed - print status so user knows it ran
