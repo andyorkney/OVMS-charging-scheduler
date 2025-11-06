@@ -26,7 +26,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "2.0.1-20251106-0900";
+var VERSION = "2.0.1";
 var __moduleLoadStart = Date.now();
 
 // Ensure exports object exists FIRST (before we try to use it!)
@@ -39,32 +39,9 @@ if (typeof exports === 'undefined') {
 // ============================================================================
 
 var logState = {
-    sdAvailable: false,
-    currentLogFile: null,
-    lastCheck: 0,
-    checkInterval: 60000  // Check SD card availability every 60s
+    sdAvailable: true,  // Assume available, will be set to false on first write failure
+    lastErrorLogged: false
 };
-
-/**
- * Check if SD card is mounted and available
- */
-function checkSDCard() {
-    var now = Date.now();
-    if (now - logState.lastCheck < logState.checkInterval) {
-        return logState.sdAvailable;
-    }
-
-    logState.lastCheck = now;
-
-    try {
-        var stat = VFS.Stat("/sd");
-        logState.sdAvailable = (stat !== null);
-        return logState.sdAvailable;
-    } catch (e) {
-        logState.sdAvailable = false;
-        return false;
-    }
-}
 
 /**
  * Get current log file path with format /sd/charging-YYYYMMDD.log
@@ -88,8 +65,8 @@ function log(message) {
     // Always write to console
     print(message);
 
-    // Try to write to file if SD card available
-    if (checkSDCard()) {
+    // Try to write to file if SD logging hasn't failed yet
+    if (logState.sdAvailable) {
         try {
             var logFile = getLogFilePath();
 
@@ -98,15 +75,32 @@ function log(message) {
             var timestamp = now.toISOString().substring(0, 19).replace("T", " ");
             var fileMessage = "[" + timestamp + "] " + message;
 
-            // Append to log file
-            VFS.Write(logFile, fileMessage, "a");
+            // Read existing content (if file exists)
+            var existingContent = "";
+            try {
+                existingContent = VFS.Open(logFile) || "";
+            } catch (e) {
+                // File doesn't exist yet - that's OK
+            }
+
+            // Append new message and save
+            VFS.Save({
+                path: logFile,
+                data: existingContent + fileMessage
+            });
+
+            // If this is first successful write after being unavailable, log it
+            if (logState.lastErrorLogged) {
+                print("[LOG] SD card write resumed\n");
+                logState.lastErrorLogged = false;
+            }
 
         } catch (e) {
-            // Silent fail - don't spam console if file writing fails
-            // Only log error once when SD becomes unavailable
-            if (logState.sdAvailable) {
-                print("[LOG] SD card write failed, continuing console-only: " + e.message + "\n");
-                logState.sdAvailable = false;
+            // Mark SD as unavailable and log error once
+            logState.sdAvailable = false;
+            if (!logState.lastErrorLogged) {
+                print("[LOG] SD card logging disabled (" + e.message + ") - console only\n");
+                logState.lastErrorLogged = true;
             }
         }
     }
@@ -116,13 +110,7 @@ log("\n");
 log("=".repeat(60) + "\n");
 log("OVMS Smart Charging Scheduler v" + VERSION + "\n");
 log("=".repeat(60) + "\n");
-
-// Check SD card on startup
-if (checkSDCard()) {
-    log("[LOG] SD card detected - logging to: " + getLogFilePath() + "\n");
-} else {
-    log("[LOG] SD card not available - console logging only\n");
-}
+log("[LOG] Logging to console + " + getLogFilePath() + "\n");
 
 // ============================================================================
 // CONFIGURATION (Hardcoded defaults, overridden by persistence)
