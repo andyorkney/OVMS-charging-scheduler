@@ -1,8 +1,8 @@
 /**
  * OVMS Smart Charging Scheduler - Phase 1 Minimal Stable Version
  *
- * VERSION: 2.0.1-20251106-0900
- * BUILD: Added file-based logging to SD card (persistent daily logs)
+ * VERSION: 2.0.1-20251106-0915
+ * BUILD: Fixed SD card logging to use correct VFS.Save() API
  *
  * ESSENTIAL FEATURES:
  * 1. Persistent cheap rate window (survives reboot)
@@ -26,7 +26,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "2.0.1";
+var VERSION = "2.0.1-20251106-0915";
 var __moduleLoadStart = Date.now();
 
 // Ensure exports object exists FIRST (before we try to use it!)
