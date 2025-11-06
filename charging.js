@@ -1,8 +1,8 @@
 /**
  * OVMS Smart Charging Scheduler - Phase 1 Minimal Stable Version
  *
- * VERSION: 2.0.0-20251106-0815
- * BUILD: Clean rebuild focusing on stability and core features
+ * VERSION: 2.0.1-20251106-0900
+ * BUILD: Added file-based logging to SD card (persistent daily logs)
  *
  * ESSENTIAL FEATURES:
  * 1. Persistent cheap rate window (survives reboot)
@@ -26,7 +26,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "2.0.0-20251106-0815";
+var VERSION = "2.0.1-20251106-0900";
 var __moduleLoadStart = Date.now();
 
 // Ensure exports object exists FIRST (before we try to use it!)
@@ -34,10 +34,95 @@ if (typeof exports === 'undefined') {
     var exports = {};
 }
 
-print("\n");
-print("=".repeat(60) + "\n");
-print("OVMS Smart Charging Scheduler v" + VERSION + "\n");
-print("=".repeat(60) + "\n");
+// ============================================================================
+// LOGGING INFRASTRUCTURE
+// ============================================================================
+
+var logState = {
+    sdAvailable: false,
+    currentLogFile: null,
+    lastCheck: 0,
+    checkInterval: 60000  // Check SD card availability every 60s
+};
+
+/**
+ * Check if SD card is mounted and available
+ */
+function checkSDCard() {
+    var now = Date.now();
+    if (now - logState.lastCheck < logState.checkInterval) {
+        return logState.sdAvailable;
+    }
+
+    logState.lastCheck = now;
+
+    try {
+        var stat = VFS.Stat("/sd");
+        logState.sdAvailable = (stat !== null);
+        return logState.sdAvailable;
+    } catch (e) {
+        logState.sdAvailable = false;
+        return false;
+    }
+}
+
+/**
+ * Get current log file path with format /sd/charging-YYYYMMDD.log
+ */
+function getLogFilePath() {
+    var now = new Date();
+    var year = now.getFullYear();
+    var month = now.getMonth() + 1;
+    var day = now.getDate();
+
+    var monthStr = month < 10 ? "0" + month : month.toString();
+    var dayStr = day < 10 ? "0" + day : day.toString();
+
+    return "/sd/charging-" + year + monthStr + dayStr + ".log";
+}
+
+/**
+ * Universal logging function - writes to both console and file
+ */
+function log(message) {
+    // Always write to console
+    print(message);
+
+    // Try to write to file if SD card available
+    if (checkSDCard()) {
+        try {
+            var logFile = getLogFilePath();
+
+            // Add timestamp to file entry
+            var now = new Date();
+            var timestamp = now.toISOString().substring(0, 19).replace("T", " ");
+            var fileMessage = "[" + timestamp + "] " + message;
+
+            // Append to log file
+            VFS.Write(logFile, fileMessage, "a");
+
+        } catch (e) {
+            // Silent fail - don't spam console if file writing fails
+            // Only log error once when SD becomes unavailable
+            if (logState.sdAvailable) {
+                print("[LOG] SD card write failed, continuing console-only: " + e.message + "\n");
+                logState.sdAvailable = false;
+            }
+        }
+    }
+}
+
+log("\n");
+log("=".repeat(60) + "\n");
+log("OVMS Smart Charging Scheduler v" + VERSION + "\n");
+log("=".repeat(60) + "\n");
+
+// Check SD card on startup
+if (checkSDCard()) {
+    log("[LOG] SD card detected - logging to: " + getLogFilePath() + "\n");
+} else {
+    log("[LOG] SD card not available - console logging only\n");
+}
 
 // ============================================================================
 // CONFIGURATION (Hardcoded defaults, overridden by persistence)
@@ -84,7 +169,7 @@ var chargingSession = {
  * Load persisted configuration from OvmsConfig storage
  */
 function loadPersistedConfig() {
-    print("[LOAD] Loading persisted configuration...\n");
+    log("[LOAD] Loading persisted configuration...\n");
 
     try {
         // Load cheap window
@@ -94,7 +179,7 @@ function loadPersistedConfig() {
             config.cheapWindowStart.minute = parseInt(OvmsConfig.Get("usr", "charging.window.start.minute") || "0");
             config.cheapWindowEnd.hour = parseInt(OvmsConfig.Get("usr", "charging.window.end.hour") || "0");
             config.cheapWindowEnd.minute = parseInt(OvmsConfig.Get("usr", "charging.window.end.minute") || "0");
-            print("[LOAD] Cheap window: " + pad(config.cheapWindowStart.hour) + ":" +
+            log("[LOAD] Cheap window: " + pad(config.cheapWindowStart.hour) + ":" +
                   pad(config.cheapWindowStart.minute) + " to " +
                   pad(config.cheapWindowEnd.hour) + ":" + pad(config.cheapWindowEnd.minute) + "\n");
         }
@@ -105,7 +190,7 @@ function loadPersistedConfig() {
             var t = parseInt(target);
             if (!isNaN(t) && t >= 20 && t <= 100) {
                 config.targetSOC = t;
-                print("[LOAD] Target SOC: " + t + "%\n");
+                log("[LOAD] Target SOC: " + t + "%\n");
             }
         }
 
@@ -115,7 +200,7 @@ function loadPersistedConfig() {
             var r = parseFloat(rate);
             if (!isNaN(r) && r > 0) {
                 config.chargeRateKW = r;
-                print("[LOAD] Charge rate: " + r + " kW\n");
+                log("[LOAD] Charge rate: " + r + " kW\n");
             }
         }
 
@@ -132,7 +217,7 @@ function loadPersistedConfig() {
                 if (curr && curr !== "" && curr !== "undefined") {
                     config.pricing.currency = curr;
                 }
-                print("[LOAD] Pricing: " + config.pricing.currency + c.toFixed(2) +
+                log("[LOAD] Pricing: " + config.pricing.currency + c.toFixed(2) +
                       " cheap, " + config.pricing.currency + s.toFixed(2) + " standard\n");
             }
         }
@@ -145,15 +230,15 @@ function loadPersistedConfig() {
 
             if (!isNaN(h) && !isNaN(m)) {
                 config.readyBy = { hour: h, minute: m };
-                print("[LOAD] Ready-by: " + pad(h) + ":" + pad(m) + "\n");
+                log("[LOAD] Ready-by: " + pad(h) + ":" + pad(m) + "\n");
             }
         }
 
-        print("[LOAD] Configuration loaded successfully\n");
+        log("[LOAD] Configuration loaded successfully\n");
 
     } catch (e) {
-        print("[ERROR] Failed to load config: " + e.message + "\n");
-        print("[LOAD] Using defaults\n");
+        log("[ERROR] Failed to load config: " + e.message + "\n");
+        log("[LOAD] Using defaults\n");
     }
 }
 
@@ -164,7 +249,7 @@ function persistValue(key, value) {
     try {
         OvmsConfig.Set("usr", key, value.toString());
     } catch (e) {
-        print("[ERROR] Failed to save " + key + ": " + e.message + "\n");
+        log("[ERROR] Failed to save " + key + ": " + e.message + "\n");
     }
 }
 
@@ -188,7 +273,7 @@ function getSafeMetric(name, defaultValue) {
             return OvmsMetrics.AsFloat(name);
         }
     } catch (e) {
-        print("[ERROR] Failed to read metric " + name + ": " + e.message + "\n");
+        log("[ERROR] Failed to read metric " + name + ": " + e.message + "\n");
     }
     return defaultValue;
 }
@@ -200,7 +285,7 @@ function safeNotify(type, subtype, message) {
     try {
         OvmsNotify.Raise(type, subtype, message);
     } catch (e) {
-        print("[ERROR] Notification failed: " + e.message + "\n");
+        log("[ERROR] Notification failed: " + e.message + "\n");
     }
 }
 
@@ -212,28 +297,28 @@ function safeNotify(type, subtype, message) {
  * Start charging
  */
 exports.start = function() {
-    print("\n[START] Initiating charge\n");
+    log("\n[START] Initiating charge\n");
 
     var soc = getSafeMetric("v.b.soc", 0);
     var plugged = getSafeMetric("v.c.pilot", false);
     var charging = getSafeMetric("v.c.charging", false);
 
     if (!plugged) {
-        print("[START] ERROR: Vehicle not plugged in\n");
+        log("[START] ERROR: Vehicle not plugged in\n");
         return false;
     }
 
     if (charging) {
-        print("[START] Already charging\n");
+        log("[START] Already charging\n");
         return true;
     }
 
     if (soc >= config.targetSOC) {
-        print("[START] Already at target (" + soc.toFixed(0) + "% >= " + config.targetSOC + "%)\n");
+        log("[START] Already at target (" + soc.toFixed(0) + "% >= " + config.targetSOC + "%)\n");
         return false;
     }
 
-    print("[START] Current SOC: " + soc.toFixed(0) + "%, Target: " + config.targetSOC + "%\n");
+    log("[START] Current SOC: " + soc.toFixed(0) + "%, Target: " + config.targetSOC + "%\n");
 
     try {
         // Initialize session tracking
@@ -243,11 +328,11 @@ exports.start = function() {
         chargingSession.targetSOC = config.targetSOC;
 
         var result = OvmsCommand.Exec("charge start");
-        print("[START] Command result: " + result + "\n");
+        log("[START] Command result: " + result + "\n");
 
         // Subscribe to monitoring
         PubSub.subscribe("ticker.60", monitorSOC);
-        print("[START] SOC monitoring active (ticker.60)\n");
+        log("[START] SOC monitoring active (ticker.60)\n");
 
         var msg = "Charging started: " + soc.toFixed(0) + "% → " + config.targetSOC + "%";
         safeNotify("info", "charge.start", msg);
@@ -255,7 +340,7 @@ exports.start = function() {
         return true;
 
     } catch (e) {
-        print("[START] ERROR: " + e.message + "\n");
+        log("[START] ERROR: " + e.message + "\n");
         chargingSession.active = false;
         return false;
     }
@@ -265,24 +350,24 @@ exports.start = function() {
  * Stop charging
  */
 exports.stop = function() {
-    print("\n[STOP] Stopping charge\n");
+    log("\n[STOP] Stopping charge\n");
 
     var charging = getSafeMetric("v.c.charging", false);
     if (!charging) {
-        print("[STOP] Not currently charging\n");
+        log("[STOP] Not currently charging\n");
         return true;
     }
 
     var soc = getSafeMetric("v.b.soc", 0);
-    print("[STOP] Final SOC: " + soc.toFixed(0) + "%\n");
+    log("[STOP] Final SOC: " + soc.toFixed(0) + "%\n");
 
     try {
         var result = OvmsCommand.Exec("charge stop");
-        print("[STOP] Command result: " + result + "\n");
+        log("[STOP] Command result: " + result + "\n");
 
         // Unsubscribe from monitoring
         PubSub.unsubscribe("ticker.60", monitorSOC);
-        print("[STOP] SOC monitoring stopped\n");
+        log("[STOP] SOC monitoring stopped\n");
 
         var msg = "Charging stopped at " + soc.toFixed(0) + "%";
         if (chargingSession.active && chargingSession.startSOC !== null) {
@@ -302,7 +387,7 @@ exports.stop = function() {
         return true;
 
     } catch (e) {
-        print("[STOP] ERROR: " + e.message + "\n");
+        log("[STOP] ERROR: " + e.message + "\n");
         return false;
     }
 };
@@ -323,17 +408,17 @@ function monitorSOC() {
         // Use session target if available, otherwise use config
         var target = chargingSession.targetSOC || config.targetSOC;
 
-        print("[MONITOR] SOC: " + soc.toFixed(1) + "%, Power: " + power.toFixed(2) +
+        log("[MONITOR] SOC: " + soc.toFixed(1) + "%, Power: " + power.toFixed(2) +
               "kW, Target: " + target + "%\n");
 
         // CRITICAL: Stop at target
         if (soc >= target) {
-            print("[MONITOR] *** TARGET REACHED *** " + soc.toFixed(1) + "% >= " + target + "%\n");
+            log("[MONITOR] *** TARGET REACHED *** " + soc.toFixed(1) + "% >= " + target + "%\n");
             exports.stop();
         }
 
     } catch (e) {
-        print("[MONITOR] ERROR: " + e.message + "\n");
+        log("[MONITOR] ERROR: " + e.message + "\n");
     }
 }
 
@@ -342,7 +427,7 @@ function monitorSOC() {
  */
 exports.checkSchedule = function() {
     try {
-        print("\n[SCHEDULE] Checking schedule...\n");
+        log("\n[SCHEDULE] Checking schedule...\n");
 
         var now = new Date();
         var currentMin = now.getHours() * 60 + now.getMinutes();
@@ -351,7 +436,7 @@ exports.checkSchedule = function() {
         var charging = getSafeMetric("v.c.charging", false);
         var plugged = getSafeMetric("v.c.pilot", false);
 
-        print("[SCHEDULE] Time: " + pad(now.getHours()) + ":" + pad(now.getMinutes()) +
+        log("[SCHEDULE] Time: " + pad(now.getHours()) + ":" + pad(now.getMinutes()) +
               ", SOC: " + soc.toFixed(0) + "%, Charging: " + charging + ", Plugged: " + plugged + "\n");
 
         // Calculate window times
@@ -368,24 +453,24 @@ exports.checkSchedule = function() {
             inWindow = (currentMin >= startMin && currentMin < endMin);
         }
 
-        print("[SCHEDULE] Cheap window: " + pad(config.cheapWindowStart.hour) + ":" +
+        log("[SCHEDULE] Cheap window: " + pad(config.cheapWindowStart.hour) + ":" +
               pad(config.cheapWindowStart.minute) + " to " +
               pad(config.cheapWindowEnd.hour) + ":" + pad(config.cheapWindowEnd.minute) +
               ", In window: " + inWindow + "\n");
 
         // Decision logic
         if (inWindow && !charging && plugged && soc < config.targetSOC) {
-            print("[SCHEDULE] *** AUTO-START *** In cheap window, SOC below target\n");
+            log("[SCHEDULE] *** AUTO-START *** In cheap window, SOC below target\n");
             exports.start();
         } else if (!inWindow && charging) {
-            print("[SCHEDULE] *** AUTO-STOP *** Outside cheap window\n");
+            log("[SCHEDULE] *** AUTO-STOP *** Outside cheap window\n");
             exports.stop();
         } else {
-            print("[SCHEDULE] No action needed\n");
+            log("[SCHEDULE] No action needed\n");
         }
 
     } catch (e) {
-        print("[SCHEDULE] ERROR: " + e.message + "\n");
+        log("[SCHEDULE] ERROR: " + e.message + "\n");
     }
 };
 
@@ -397,11 +482,11 @@ exports.checkSchedule = function() {
  * Set cheap rate window
  */
 exports.setSchedule = function(startHour, startMin, endHour, endMin) {
-    print("\n[CONFIG] Setting cheap window\n");
+    log("\n[CONFIG] Setting cheap window\n");
 
     if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23 ||
         startMin < 0 || startMin > 59 || endMin < 0 || endMin > 59) {
-        print("[CONFIG] ERROR: Invalid time values\n");
+        log("[CONFIG] ERROR: Invalid time values\n");
         return false;
     }
 
@@ -414,7 +499,7 @@ exports.setSchedule = function(startHour, startMin, endHour, endMin) {
     persistValue("charging.window.end.hour", endHour);
     persistValue("charging.window.end.minute", endMin);
 
-    print("[CONFIG] Cheap window: " + pad(startHour) + ":" + pad(startMin) +
+    log("[CONFIG] Cheap window: " + pad(startHour) + ":" + pad(startMin) +
           " to " + pad(endHour) + ":" + pad(endMin) + " [SAVED]\n");
 
     return true;
@@ -424,10 +509,10 @@ exports.setSchedule = function(startHour, startMin, endHour, endMin) {
  * Set target SOC
  */
 exports.setLimits = function(targetSOC) {
-    print("\n[CONFIG] Setting target SOC\n");
+    log("\n[CONFIG] Setting target SOC\n");
 
     if (targetSOC < 20 || targetSOC > 100) {
-        print("[CONFIG] ERROR: Target must be 20-100%\n");
+        log("[CONFIG] ERROR: Target must be 20-100%\n");
         return false;
     }
 
@@ -436,7 +521,7 @@ exports.setLimits = function(targetSOC) {
     // Persist
     persistValue("charging.target.soc", targetSOC);
 
-    print("[CONFIG] Target SOC: " + targetSOC + "% [SAVED]\n");
+    log("[CONFIG] Target SOC: " + targetSOC + "% [SAVED]\n");
 
     return true;
 };
@@ -445,10 +530,10 @@ exports.setLimits = function(targetSOC) {
  * Set charge rate
  */
 exports.setChargeRate = function(rateKW) {
-    print("\n[CONFIG] Setting charge rate\n");
+    log("\n[CONFIG] Setting charge rate\n");
 
     if (rateKW < 1 || rateKW > 350) {
-        print("[CONFIG] ERROR: Invalid charge rate\n");
+        log("[CONFIG] ERROR: Invalid charge rate\n");
         return false;
     }
 
@@ -459,7 +544,7 @@ exports.setChargeRate = function(rateKW) {
 
     var type = rateKW < 2.5 ? "granny" : rateKW < 4 ? "Type 2 slow" :
                rateKW < 10 ? "Type 2 fast" : "rapid";
-    print("[CONFIG] Charge rate: " + rateKW + " kW (" + type + ") [SAVED]\n");
+    log("[CONFIG] Charge rate: " + rateKW + " kW (" + type + ") [SAVED]\n");
 
     return true;
 };
@@ -468,10 +553,10 @@ exports.setChargeRate = function(rateKW) {
  * Set pricing
  */
 exports.setPricing = function(cheapRate, standardRate, currency) {
-    print("\n[CONFIG] Setting pricing\n");
+    log("\n[CONFIG] Setting pricing\n");
 
     if (cheapRate < 0 || standardRate < 0) {
-        print("[CONFIG] ERROR: Invalid rates\n");
+        log("[CONFIG] ERROR: Invalid rates\n");
         return false;
     }
 
@@ -488,7 +573,7 @@ exports.setPricing = function(cheapRate, standardRate, currency) {
         persistValue("charging.price.currency", currency);
     }
 
-    print("[CONFIG] Pricing: " + config.pricing.currency + cheapRate.toFixed(2) +
+    log("[CONFIG] Pricing: " + config.pricing.currency + cheapRate.toFixed(2) +
           " cheap, " + config.pricing.currency + standardRate.toFixed(2) + " standard [SAVED]\n");
 
     return true;
@@ -498,10 +583,10 @@ exports.setPricing = function(cheapRate, standardRate, currency) {
  * Set ready-by time
  */
 exports.setReadyBy = function(hour, minute) {
-    print("\n[CONFIG] Setting ready-by time\n");
+    log("\n[CONFIG] Setting ready-by time\n");
 
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-        print("[CONFIG] ERROR: Invalid time\n");
+        log("[CONFIG] ERROR: Invalid time\n");
         return false;
     }
 
@@ -511,8 +596,8 @@ exports.setReadyBy = function(hour, minute) {
     persistValue("charging.readyby.hour", hour);
     persistValue("charging.readyby.minute", minute);
 
-    print("[CONFIG] Ready-by: " + pad(hour) + ":" + pad(minute) + " [SAVED]\n");
-    print("[CONFIG] Charging will start at cheap window start (" +
+    log("[CONFIG] Ready-by: " + pad(hour) + ":" + pad(minute) + " [SAVED]\n");
+    log("[CONFIG] Charging will start at cheap window start (" +
           pad(config.cheapWindowStart.hour) + ":" + pad(config.cheapWindowStart.minute) +
           ") to maximize cheap rate usage\n");
 
@@ -523,7 +608,7 @@ exports.setReadyBy = function(hour, minute) {
  * Clear ready-by (return to fixed schedule)
  */
 exports.clearReadyBy = function() {
-    print("\n[CONFIG] Clearing ready-by time\n");
+    log("\n[CONFIG] Clearing ready-by time\n");
 
     config.readyBy = null;
 
@@ -531,7 +616,7 @@ exports.clearReadyBy = function() {
     persistValue("charging.readyby.hour", "");
     persistValue("charging.readyby.minute", "");
 
-    print("[CONFIG] Ready-by cleared - using fixed schedule mode [SAVED]\n");
+    log("[CONFIG] Ready-by cleared - using fixed schedule mode [SAVED]\n");
 
     return true;
 };
@@ -540,26 +625,26 @@ exports.clearReadyBy = function() {
  * Show current status
  */
 exports.status = function() {
-    print("\n");
-    print("=".repeat(60) + "\n");
-    print("OVMS Smart Charging Status v" + VERSION + "\n");
-    print("=".repeat(60) + "\n");
-    print("Time: " + new Date().toString() + "\n\n");
+    log("\n");
+    log("=".repeat(60) + "\n");
+    log("OVMS Smart Charging Status v" + VERSION + "\n");
+    log("=".repeat(60) + "\n");
+    log("Time: " + new Date().toString() + "\n\n");
 
     // Configuration
-    print("Configuration:\n");
-    print("  Cheap window: " + pad(config.cheapWindowStart.hour) + ":" +
+    log("Configuration:\n");
+    log("  Cheap window: " + pad(config.cheapWindowStart.hour) + ":" +
           pad(config.cheapWindowStart.minute) + " to " +
           pad(config.cheapWindowEnd.hour) + ":" + pad(config.cheapWindowEnd.minute) + "\n");
-    print("  Target SOC: " + config.targetSOC + "%\n");
-    print("  Charge rate: " + config.chargeRateKW + " kW\n");
-    print("  Pricing: " + config.pricing.currency + config.pricing.cheap.toFixed(2) +
+    log("  Target SOC: " + config.targetSOC + "%\n");
+    log("  Charge rate: " + config.chargeRateKW + " kW\n");
+    log("  Pricing: " + config.pricing.currency + config.pricing.cheap.toFixed(2) +
           " cheap, " + config.pricing.currency + config.pricing.standard.toFixed(2) + " standard\n");
 
     if (config.readyBy) {
-        print("  Ready-by: " + pad(config.readyBy.hour) + ":" + pad(config.readyBy.minute) + "\n");
+        log("  Ready-by: " + pad(config.readyBy.hour) + ":" + pad(config.readyBy.minute) + "\n");
     } else {
-        print("  Mode: Fixed schedule\n");
+        log("  Mode: Fixed schedule\n");
     }
 
     // Vehicle status
@@ -568,15 +653,15 @@ exports.status = function() {
     var plugged = getSafeMetric("v.c.pilot", false);
     var temp = getSafeMetric("v.b.temp", null);
 
-    print("\nVehicle:\n");
-    print("  SOC: " + soc.toFixed(0) + "%\n");
-    print("  Charging: " + charging + "\n");
-    print("  Plugged in: " + plugged + "\n");
+    log("\nVehicle:\n");
+    log("  SOC: " + soc.toFixed(0) + "%\n");
+    log("  Charging: " + charging + "\n");
+    log("  Plugged in: " + plugged + "\n");
     if (temp !== null) {
-        print("  Battery temp: " + temp.toFixed(0) + " C\n");
+        log("  Battery temp: " + temp.toFixed(0) + " C\n");
     }
 
-    print("\n");
+    log("\n");
 };
 
 // ============================================================================
@@ -585,7 +670,7 @@ exports.status = function() {
 
 // Auto-start monitoring when vehicle starts charging
 PubSub.subscribe("vehicle.charge.start", function(msg, data) {
-    print("\n[EVENT] Vehicle charge started\n");
+    log("\n[EVENT] Vehicle charge started\n");
 
     if (!chargingSession.active) {
         var soc = getSafeMetric("v.b.soc", 0);
@@ -593,27 +678,27 @@ PubSub.subscribe("vehicle.charge.start", function(msg, data) {
         chargingSession.startTime = Date.now();
         chargingSession.startSOC = soc;
         chargingSession.targetSOC = config.targetSOC;
-        print("[EVENT] Session tracking initialized: " + soc.toFixed(0) + "% → " +
+        log("[EVENT] Session tracking initialized: " + soc.toFixed(0) + "% → " +
               config.targetSOC + "%\n");
     }
 
     PubSub.subscribe("ticker.60", monitorSOC);
-    print("[EVENT] SOC monitoring activated\n");
+    log("[EVENT] SOC monitoring activated\n");
 });
 
 // Auto-stop monitoring when vehicle stops charging
 PubSub.subscribe("vehicle.charge.stop", function(msg, data) {
-    print("\n[EVENT] Vehicle charge stopped\n");
+    log("\n[EVENT] Vehicle charge stopped\n");
 
     PubSub.unsubscribe("ticker.60", monitorSOC);
-    print("[EVENT] SOC monitoring deactivated\n");
+    log("[EVENT] SOC monitoring deactivated\n");
 
     if (chargingSession.active) {
         var soc = getSafeMetric("v.b.soc", 0);
         var gain = soc - chargingSession.startSOC;
         var duration = (Date.now() - chargingSession.startTime) / (1000 * 60);
 
-        print("[EVENT] Session complete: " + chargingSession.startSOC.toFixed(0) + "% → " +
+        log("[EVENT] Session complete: " + chargingSession.startSOC.toFixed(0) + "% → " +
               soc.toFixed(0) + "% (+" + gain.toFixed(0) + "%, " + duration.toFixed(0) + " min)\n");
 
         // Clear session
@@ -632,7 +717,7 @@ PubSub.subscribe("vehicle.charge.stop", function(msg, data) {
 loadPersistedConfig();
 
 var __moduleLoadTime = Date.now() - __moduleLoadStart;
-print("[INIT] Module loaded in " + __moduleLoadTime + " ms\n");
-print("[INIT] Ready for operation\n");
-print("=".repeat(60) + "\n");
-print("\n");
+log("[INIT] Module loaded in " + __moduleLoadTime + " ms\n");
+log("[INIT] Ready for operation\n");
+log("=".repeat(60) + "\n");
+log("\n");
