@@ -29,6 +29,11 @@
 var VERSION = "2.0.0-20251106-0815";
 var __moduleLoadStart = Date.now();
 
+// Ensure exports object exists FIRST (before we try to use it!)
+if (typeof exports === 'undefined') {
+    var exports = {};
+}
+
 print("\n");
 print("=".repeat(60) + "\n");
 print("OVMS Smart Charging Scheduler v" + VERSION + "\n");
@@ -622,11 +627,6 @@ PubSub.subscribe("vehicle.charge.stop", function(msg, data) {
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
-
-// Ensure exports exists
-if (typeof exports === 'undefined') {
-    var exports = {};
-}
 
 // Load persisted configuration
 loadPersistedConfig();
