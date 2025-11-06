@@ -207,6 +207,7 @@ After reboot at 08:00:
 - Add OvmsConfig read/write functions
 - Modify existing setSchedule(), setReadyBy(), setLimits() to persist
 - Load persisted settings on module initialization
+- Fix NaN/undefined handling in config loading
 
 ### Phase 2: Temp Functions ✅ (Second)
 - Implement setTempSchedule()
@@ -225,6 +226,21 @@ After reboot at 08:00:
 - Test temp schedule auto-revert
 - Test critical journey survival
 - Test 95%+ tolerance clearing
+
+### Phase 5: UX Enhancements (Future)
+- **Proactive overflow warnings**: Show overflow warning when setLimits() is called
+- **Example output when setting 90% target:**
+  ```
+  [PERSISTENT] Target: 90%, skip above: 80%
+
+  [WARNING] Charge time (7.3h) exceeds cheap window (6.0h)
+  Cost: £1.24 (£0.76 cheap + £0.48 overflow)
+  Overflow: 1.3h (2.3 kWh) @ £0.29/kWh after 05:30
+
+  Tip: Run 'charging.nextCharge()' for full schedule details
+  ```
+- **Benefits**: User immediately knows if target will overflow, can adjust before charge starts
+- **Implementation**: Call calculateOptimalStart() in setLimits() and show warning if overflow detected
 
 ---
 
