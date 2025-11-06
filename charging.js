@@ -1,8 +1,8 @@
 /**
  * OVMS Smart Charging Scheduler - Phase 1 Minimal Stable Version
  *
- * VERSION: 2.0.1-20251106-0915
- * BUILD: Fixed SD card logging to use correct VFS.Save() API
+ * VERSION: 2.0.2-20251106-0920
+ * BUILD: EMERGENCY FIX - Disabled SD logging (was causing abort() crashes)
  *
  * ESSENTIAL FEATURES:
  * 1. Persistent cheap rate window (survives reboot)
@@ -26,7 +26,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "2.0.1-20251106-0915";
+var VERSION = "2.0.2-20251106-0920";
 var __moduleLoadStart = Date.now();
 
 // Ensure exports object exists FIRST (before we try to use it!)
@@ -38,79 +38,26 @@ if (typeof exports === 'undefined') {
 // LOGGING INFRASTRUCTURE
 // ============================================================================
 
-var logState = {
-    sdAvailable: true,  // Assume available, will be set to false on first write failure
-    lastErrorLogged: false
-};
+// CRITICAL: SD logging DISABLED due to VFS.Save() causing crashes
+// The read-modify-write pattern was too heavy and caused stack overflow
+// Keeping infrastructure for future implementation with proper batching
 
 /**
- * Get current log file path with format /sd/charging-YYYYMMDD.log
- */
-function getLogFilePath() {
-    var now = new Date();
-    var year = now.getFullYear();
-    var month = now.getMonth() + 1;
-    var day = now.getDate();
-
-    var monthStr = month < 10 ? "0" + month : month.toString();
-    var dayStr = day < 10 ? "0" + day : day.toString();
-
-    return "/sd/charging-" + year + monthStr + dayStr + ".log";
-}
-
-/**
- * Universal logging function - writes to both console and file
+ * Universal logging function - CONSOLE ONLY (SD disabled due to crashes)
  */
 function log(message) {
     // Always write to console
     print(message);
 
-    // Try to write to file if SD logging hasn't failed yet
-    if (logState.sdAvailable) {
-        try {
-            var logFile = getLogFilePath();
-
-            // Add timestamp to file entry
-            var now = new Date();
-            var timestamp = now.toISOString().substring(0, 19).replace("T", " ");
-            var fileMessage = "[" + timestamp + "] " + message;
-
-            // Read existing content (if file exists)
-            var existingContent = "";
-            try {
-                existingContent = VFS.Open(logFile) || "";
-            } catch (e) {
-                // File doesn't exist yet - that's OK
-            }
-
-            // Append new message and save
-            VFS.Save({
-                path: logFile,
-                data: existingContent + fileMessage
-            });
-
-            // If this is first successful write after being unavailable, log it
-            if (logState.lastErrorLogged) {
-                print("[LOG] SD card write resumed\n");
-                logState.lastErrorLogged = false;
-            }
-
-        } catch (e) {
-            // Mark SD as unavailable and log error once
-            logState.sdAvailable = false;
-            if (!logState.lastErrorLogged) {
-                print("[LOG] SD card logging disabled (" + e.message + ") - console only\n");
-                logState.lastErrorLogged = true;
-            }
-        }
-    }
+    // SD logging DISABLED - was causing abort() crashes on core 1
+    // VFS.Save() read-modify-write pattern too heavy for frequent calls
+    // TODO: Implement batched logging or background writer if needed
 }
 
 log("\n");
 log("=".repeat(60) + "\n");
 log("OVMS Smart Charging Scheduler v" + VERSION + "\n");
 log("=".repeat(60) + "\n");
-log("[LOG] Logging to console + " + getLogFilePath() + "\n");
 
 // ============================================================================
 // CONFIGURATION (Hardcoded defaults, overridden by persistence)
