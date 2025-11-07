@@ -1,8 +1,8 @@
 /**
  * OVMS Smart Charging Scheduler - ULTRA-MINIMAL Emergency Version
  *
- * VERSION: 2.0.3-20251106-0930
- * BUILD: Stripped to absolute essentials - NO dynamic subscriptions
+ * VERSION: 2.0.4-20251107-0100
+ * BUILD: Added notifications back (proven stable after successful charge cycle)
  *
  * CRITICAL FIXES:
  * - Removed dynamic ticker.60 subscribe/unsubscribe (was causing stack overflow)
@@ -26,7 +26,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "2.0.3-20251106-0930";
+var VERSION = "2.0.4-20251107-0100";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -120,6 +120,13 @@ exports.start = function() {
         session.monitoring = true;
         OvmsCommand.Exec("charge start");
         print("[START] Charging started\n");
+
+        // Notify OVMS app
+        try {
+            OvmsNotify.Raise("info", "charge.smart",
+                "Smart charging: " + soc.toFixed(0) + "% → " + config.targetSOC + "%");
+        } catch (e) {}
+
         return true;
     } catch (e) {
         print("[START] Error: " + e.message + "\n");
@@ -161,6 +168,13 @@ function monitorSOC() {
         // Check target
         if (soc >= config.targetSOC) {
             print("[MONITOR] Target reached: " + soc.toFixed(0) + "%\n");
+
+            // Notify OVMS app
+            try {
+                OvmsNotify.Raise("info", "charge.smart",
+                    "Target reached: " + soc.toFixed(0) + "% (target " + config.targetSOC + "%)");
+            } catch (e) {}
+
             exports.stop();
         }
     } catch (e) {
