@@ -1,8 +1,8 @@
 /**
  * OVMS Smart Charging Scheduler - Enhanced Stable Version
  *
- * VERSION: 2.0.5-20251107-1200
- * BUILD: ABRP-inspired enhancements - logger, Leaf metrics, persistent notifications
+ * VERSION: 2.0.5.1-20251110-1930
+ * BUILD: Fixed unreliable Leaf instrument metrics, added UK miles conversion
  *
  * ENHANCEMENTS FROM v2.0.4:
  * - Logger utility with timestamps (borrowed from ABRP)
@@ -29,7 +29,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-const VERSION = "2.0.5-20251107-1200";
+const VERSION = "2.0.5.1-20251110-1930";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -153,31 +153,28 @@ function getMetric(name, def) {
 }
 
 /**
- * Get SOC with Nissan Leaf specific metric if available
+ * Convert km to miles for UK users
+ */
+function kmToMiles(km) {
+    return km * 0.621371;
+}
+
+/**
+ * Get SOC - Use standard metric (Leaf instrument unreliable after sleep/reboot)
  */
 function getSOC() {
-    if (vehicleType === 'NL') {
-        // Use Leaf-specific instrument SOC (more accurate)
-        var instrumentSOC = getMetric('xnl.v.b.soc.instrument', null);
-        if (instrumentSOC !== null) {
-            return instrumentSOC;
-        }
-    }
-    // Fallback to standard SOC
+    // Use standard SOC - proven reliable in v2.0.4
+    // Leaf instrument metrics (xnl.v.b.soc.instrument) are unreliable after sleep
     return getMetric('v.b.soc', 0);
 }
 
 /**
- * Get SOH with Nissan Leaf specific metric if available
+ * Get SOH - Use standard metric, return null if 0 (not yet available)
  */
 function getSOH() {
-    if (vehicleType === 'NL') {
-        var instrumentSOH = getMetric('xnl.v.b.soh.instrument', null);
-        if (instrumentSOH !== null) {
-            return instrumentSOH;
-        }
-    }
-    return getMetric('v.b.soh', 0);
+    var soh = getMetric('v.b.soh', 0);
+    // Return null if 0 (not available yet after sleep/reboot)
+    return soh > 0 ? soh : null;
 }
 
 // ============================================================================
@@ -363,7 +360,8 @@ exports.status = function() {
     var power = getMetric("v.c.power", 0);
     var voltage = getMetric("v.b.voltage", 0);
     var temp = getMetric("v.b.temp", null);
-    var range = getMetric("v.b.range.est", 0);
+    var rangeKm = getMetric("v.b.range.est", 0);
+    var rangeMiles = kmToMiles(rangeKm);
     var soh = getSOH();
 
     print("\nVehicle:\n");
@@ -377,8 +375,8 @@ exports.status = function() {
     if (temp !== null) {
         print("  Battery Temp: " + temp.toFixed(0) + " °C\n");
     }
-    print("  Est. Range: " + range.toFixed(0) + " km\n");
-    if (soh > 0) {
+    print("  Est. Range: " + rangeMiles.toFixed(0) + " miles (" + rangeKm.toFixed(0) + " km)\n");
+    if (soh !== null) {
         print("  State of Health: " + soh.toFixed(0) + " %\n");
     }
 
@@ -402,6 +400,10 @@ exports.info = function() {
         print(label + ": " + value + " " + unit + "\n");
     }
 
+    var rangeKm = getMetric("v.b.range.est", 0);
+    var odometerKm = getMetric("v.p.odometer", 0);
+    var soh = getSOH();
+
     showMetric("UTC Timestamp", Math.floor(Date.now() / 1000), "s");
     showMetric("State of Charge", getSOC().toFixed(1), "%");
     showMetric("Battery Power", getMetric("v.b.power", 0).toFixed(2), "kW");
@@ -410,9 +412,11 @@ exports.info = function() {
     showMetric("Battery Voltage", getMetric("v.b.voltage", 0).toFixed(1), "V");
     showMetric("Battery Current", getMetric("v.b.current", 0).toFixed(1), "A");
     showMetric("Battery Temp", getMetric("v.b.temp", 0).toFixed(0), "°C");
-    showMetric("State of Health", getSOH().toFixed(0), "%");
-    showMetric("Estimated Range", getMetric("v.b.range.est", 0).toFixed(0), "km");
-    showMetric("Odometer", getMetric("v.p.odometer", 0).toFixed(1), "km");
+    if (soh !== null) {
+        showMetric("State of Health", soh.toFixed(0), "%");
+    }
+    showMetric("Estimated Range", kmToMiles(rangeKm).toFixed(0) + " miles (" + rangeKm.toFixed(0) + " km)");
+    showMetric("Odometer", kmToMiles(odometerKm).toFixed(1) + " miles (" + odometerKm.toFixed(1) + " km)");
     if (vehicleType) {
         showMetric("Vehicle Type", vehicleType);
     }
