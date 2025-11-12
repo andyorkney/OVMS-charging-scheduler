@@ -240,11 +240,15 @@ function monitorSOC() {
 
         var charging = getMetric("v.c.charging", false);
         if (!charging) {
+            console.info("Monitor: Charging stopped externally");
             session.monitoring = false;
             return;
         }
 
         var soc = getSOC();
+
+        // Log every check for debugging
+        console.info("Monitor: SOC=" + soc.toFixed(1) + "% Target=" + config.targetSOC + "%");
 
         // Check target
         if (soc >= config.targetSOC) {
@@ -261,7 +265,7 @@ function monitorSOC() {
             exports.stop();
         }
     } catch (e) {
-        // Silent fail - don't spam console
+        console.error("Monitor failed", e);
     }
 }
 
@@ -384,6 +388,21 @@ exports.status = function() {
         print("  Vehicle Type: " + vehicleType + "\n");
     }
 
+    print("\n");
+};
+
+/**
+ * Debug - show internal state
+ */
+exports.debug = function() {
+    print("\nDEBUG - Internal State\n");
+    print("=".repeat(50) + "\n");
+    print("session.monitoring: " + session.monitoring + "\n");
+    print("session.subscribed: " + session.subscribed + "\n");
+    print("config.targetSOC: " + config.targetSOC + "\n");
+    print("Current SOC: " + getSOC().toFixed(1) + "%\n");
+    print("Charging: " + getMetric("v.c.charging", false) + "\n");
+    print("Plugged: " + getMetric("v.c.pilot", false) + "\n");
     print("\n");
 };
 
