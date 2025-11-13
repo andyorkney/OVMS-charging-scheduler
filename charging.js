@@ -1,88 +1,43 @@
 /**
- * OVMS Smart Charging Scheduler - Enhanced Stable Version
+ * OVMS Smart Charging Scheduler - Minimal Stable Version
  *
- * VERSION: 2.0.5.1-20251110-1930
- * BUILD: Fixed unreliable Leaf instrument metrics, added UK miles conversion
+ * VERSION: 2.0.7-20251113-1400
+ * BUILD: Minimal + UK miles + app button support
+ *
+ * BASED ON: v2.0.4 (proven stable 278-line baseline)
  *
  * ENHANCEMENTS FROM v2.0.4:
- * - Logger utility with timestamps (borrowed from ABRP)
- * - Persistent notifications ("alert" type instead of "info")
- * - Nissan Leaf specific SOC metric (xnl.v.b.soc.instrument)
- * - Subscription state tracking (prevent duplicate subscriptions)
- * - Performance monitoring for checkSchedule()
- * - Enhanced status display with units and vehicle info
- * - Vehicle type detection
+ * - UK miles conversion for range display
+ * - App button support via OvmsNotify for status()
+ * - debug() command for troubleshooting internal state
+ * - Enhanced status display with range information
  *
- * STABLE BASE FROM v2.0.3/2.0.4:
+ * STABLE BASE FROM v2.0.4:
  * - Static ticker.60 subscription (no dynamic subscribe/unsubscribe)
  * - Flag-based monitoring (session.monitoring)
  * - Minimal code, maximum stability
+ * - Simple print() statements (no logger overhead)
  *
  * USAGE:
- * charging.setSchedule(23,30,5,30)  - Set cheap window
- * charging.setLimits(80)             - Set target to 80%
- * charging.status()                  - Show detailed status
- * charging.info()                    - Show metrics (ABRP style)
+ * script eval charging.setSchedule(23,30,5,30)  - Set cheap window
+ * script eval charging.setLimits(80)             - Set target to 80%
+ * script eval charging.status()                  - Show status (works in console AND app button)
+ * script eval charging.debug()                   - Show internal state for troubleshooting
  */
 
 // ============================================================================
 // VERSION & MODULE INFO
 // ============================================================================
 
-const VERSION = "2.0.5.1-20251110-1930";
+var VERSION = "2.0.7-20251113-1400";
 
 if (typeof exports === 'undefined') {
     var exports = {};
 }
 
-// ============================================================================
-// LOGGER UTILITY (borrowed from ABRP.js)
-// ============================================================================
-
-function timestamp() {
-    return new Date().toLocaleString();
-}
-
-function logger() {
-    function log(message, obj) {
-        print(message + (obj ? ' ' + JSON.stringify(obj) : '') + '\n');
-    }
-
-    function debug(message, obj) {
-        // Debug disabled by default - enable for troubleshooting
-        // log('(' + timestamp() + ') DEBUG: ' + message, obj);
-    }
-
-    function error(message, obj) {
-        log('(' + timestamp() + ') ERROR: ' + message, obj);
-    }
-
-    function info(message, obj) {
-        log('(' + timestamp() + ') INFO: ' + message, obj);
-    }
-
-    function warn(message, obj) {
-        log('(' + timestamp() + ') WARN: ' + message, obj);
-    }
-
-    return { debug, error, info, log, warn };
-}
-
-const console = logger();
-
-console.info("OVMS Smart Charging v" + VERSION);
+print("\n");
+print("OVMS Smart Charging v" + VERSION + "\n");
 print("=".repeat(50) + "\n");
-
-// ============================================================================
-// VEHICLE TYPE DETECTION
-// ============================================================================
-
-var vehicleType = "";
-try {
-    vehicleType = OvmsMetrics.Value('v.type') || "";
-} catch (e) {
-    vehicleType = "";
-}
 
 // ============================================================================
 // CONFIGURATION
@@ -95,8 +50,7 @@ var config = {
 };
 
 var session = {
-    monitoring: false,  // Flag to enable/disable SOC monitoring
-    subscribed: false   // Track ticker.60 subscription state
+    monitoring: false  // Flag to enable/disable SOC monitoring
 };
 
 // ============================================================================
@@ -121,16 +75,14 @@ function loadConfig() {
             config.cheapWindowEnd.minute = parseInt(OvmsConfig.Get("usr", "charging.window.end.minute") || "0");
         }
     } catch (e) {
-        console.error("Load config failed", e);
+        print("[ERROR] Load config: " + e.message + "\n");
     }
 }
 
 function saveValue(key, value) {
     try {
         OvmsConfig.Set("usr", key, value.toString());
-    } catch (e) {
-        console.error("Save value failed: " + key, e);
-    }
+    } catch (e) {}
 }
 
 // ============================================================================
@@ -141,9 +93,6 @@ function pad(n) {
     return n < 10 ? "0" + n : n.toString();
 }
 
-/**
- * Get metric with vehicle-specific handling (borrowed from ABRP pattern)
- */
 function getMetric(name, def) {
     try {
         return OvmsMetrics.HasValue(name) ? OvmsMetrics.AsFloat(name) : def;
@@ -159,58 +108,38 @@ function kmToMiles(km) {
     return km * 0.621371;
 }
 
-/**
- * Get SOC - Use standard metric (Leaf instrument unreliable after sleep/reboot)
- */
-function getSOC() {
-    // Use standard SOC - proven reliable in v2.0.4
-    // Leaf instrument metrics (xnl.v.b.soc.instrument) are unreliable after sleep
-    return getMetric('v.b.soc', 0);
-}
-
-/**
- * Get SOH - Use standard metric, return null if 0 (not yet available)
- */
-function getSOH() {
-    var soh = getMetric('v.b.soh', 0);
-    // Return null if 0 (not available yet after sleep/reboot)
-    return soh > 0 ? soh : null;
-}
-
 // ============================================================================
 // CHARGING CONTROL
 // ============================================================================
 
 exports.start = function() {
-    var soc = getSOC();
+    var soc = getMetric("v.b.soc", 0);
     var plugged = getMetric("v.c.pilot", false);
 
     if (!plugged) {
-        console.warn("Start failed: Not plugged in");
+        print("[START] Not plugged in\n");
         return false;
     }
 
     if (soc >= config.targetSOC) {
-        console.info("Start skipped: Already at target (" + soc.toFixed(0) + "%)");
+        print("[START] Already at target\n");
         return false;
     }
 
     try {
         session.monitoring = true;
         OvmsCommand.Exec("charge start");
-        console.info("Charging started: " + soc.toFixed(0) + "% → " + config.targetSOC + "%");
+        print("[START] Charging started: " + soc.toFixed(0) + "% → " + config.targetSOC + "%\n");
 
-        // Notify OVMS app (persistent notification)
+        // Notify OVMS app
         try {
-            OvmsNotify.Raise("alert", "charge.smart.started",
+            OvmsNotify.Raise("info", "charge.smart",
                 "Smart charging: " + soc.toFixed(0) + "% → " + config.targetSOC + "%");
-        } catch (e) {
-            console.error("Notification failed", e);
-        }
+        } catch (e) {}
 
         return true;
     } catch (e) {
-        console.error("Start charging failed", e);
+        print("[START] Error: " + e.message + "\n");
         return false;
     }
 };
@@ -219,10 +148,10 @@ exports.stop = function() {
     try {
         session.monitoring = false;
         OvmsCommand.Exec("charge stop");
-        console.info("Charging stopped");
+        print("[STOP] Charging stopped\n");
         return true;
     } catch (e) {
-        console.error("Stop charging failed", e);
+        print("[STOP] Error: " + e.message + "\n");
         return false;
     }
 };
@@ -240,32 +169,26 @@ function monitorSOC() {
 
         var charging = getMetric("v.c.charging", false);
         if (!charging) {
-            console.info("Monitor: Charging stopped externally");
             session.monitoring = false;
             return;
         }
 
-        var soc = getSOC();
-
-        // Log every check for debugging
-        console.info("Monitor: SOC=" + soc.toFixed(1) + "% Target=" + config.targetSOC + "%");
+        var soc = getMetric("v.b.soc", 0);
 
         // Check target
         if (soc >= config.targetSOC) {
-            console.info("Target reached: " + soc.toFixed(1) + "% (target " + config.targetSOC + "%)");
+            print("[MONITOR] Target reached: " + soc.toFixed(0) + "%\n");
 
-            // Notify OVMS app (persistent notification)
+            // Notify OVMS app
             try {
-                OvmsNotify.Raise("alert", "charge.smart.stopped",
+                OvmsNotify.Raise("info", "charge.smart",
                     "Target reached: " + soc.toFixed(0) + "% (target " + config.targetSOC + "%)");
-            } catch (e) {
-                console.error("Notification failed", e);
-            }
+            } catch (e) {}
 
             exports.stop();
         }
     } catch (e) {
-        console.error("Monitor failed", e);
+        // Silent fail - don't spam console
     }
 }
 
@@ -274,13 +197,11 @@ function monitorSOC() {
 // ============================================================================
 
 exports.checkSchedule = function() {
-    var startTime = performance.now();  // Performance monitoring
-
     try {
         var now = new Date();
         var min = now.getHours() * 60 + now.getMinutes();
 
-        var soc = getSOC();
+        var soc = getMetric("v.b.soc", 0);
         var charging = getMetric("v.c.charging", false);
         var plugged = getMetric("v.c.pilot", false);
 
@@ -293,22 +214,16 @@ exports.checkSchedule = function() {
 
         // Auto-start in window
         if (inWindow && !charging && plugged && soc < config.targetSOC) {
-            console.info("Schedule: Auto-start triggered");
+            print("[SCHEDULE] Auto-start\n");
             exports.start();
         }
         // Auto-stop outside window
         else if (!inWindow && charging) {
-            console.info("Schedule: Auto-stop triggered (outside window)");
+            print("[SCHEDULE] Auto-stop\n");
             exports.stop();
         }
     } catch (e) {
-        console.error("checkSchedule failed", e);
-    } finally {
-        // Performance warning if slow
-        var duration = performance.now() - startTime;
-        if (duration > 500) {
-            console.warn("checkSchedule took " + duration.toFixed(0) + " ms");
-        }
+        // Silent fail
     }
 };
 
@@ -325,122 +240,101 @@ exports.setSchedule = function(sh, sm, eh, em) {
     saveValue("charging.window.end.hour", eh);
     saveValue("charging.window.end.minute", em);
 
-    console.info("Window set: " + pad(sh) + ":" + pad(sm) + " to " + pad(eh) + ":" + pad(em));
+    print("[CONFIG] Window: " + pad(sh) + ":" + pad(sm) + " to " + pad(eh) + ":" + pad(em) + "\n");
     return true;
 };
 
 exports.setLimits = function(target) {
     if (target < 20 || target > 100) {
-        console.error("Invalid target: " + target + " (must be 20-100%)");
+        print("[CONFIG] Invalid target\n");
         return false;
     }
 
     config.targetSOC = target;
     saveValue("charging.target.soc", target);
 
-    console.info("Target set: " + target + "%");
+    print("[CONFIG] Target: " + target + "%\n");
     return true;
 };
 
 /**
- * Enhanced status display with units and vehicle info
+ * Status display - works in console AND OVMS app buttons
+ * Uses string building + OvmsNotify pattern for app compatibility
  */
 exports.status = function() {
-    print("\n");
-    print("OVMS Smart Charging v" + VERSION + "\n");
-    print("=".repeat(50) + "\n");
-
-    // Schedule
-    print("Schedule:\n");
-    print("  Cheap window: " + pad(config.cheapWindowStart.hour) + ":" +
-          pad(config.cheapWindowStart.minute) + " to " +
-          pad(config.cheapWindowEnd.hour) + ":" + pad(config.cheapWindowEnd.minute) + "\n");
-    print("  Target SOC: " + config.targetSOC + " %\n");
-
-    // Vehicle state
-    var soc = getSOC();
+    var soc = getMetric("v.b.soc", 0);
     var charging = getMetric("v.c.charging", false);
     var plugged = getMetric("v.c.pilot", false);
-    var power = getMetric("v.c.power", 0);
-    var voltage = getMetric("v.b.voltage", 0);
-    var temp = getMetric("v.b.temp", null);
     var rangeKm = getMetric("v.b.range.est", 0);
     var rangeMiles = kmToMiles(rangeKm);
-    var soh = getSOH();
+    var voltage = getMetric("v.b.voltage", 0);
+    var power = getMetric("v.c.power", 0);
 
-    print("\nVehicle:\n");
-    print("  State of Charge: " + soc.toFixed(1) + " %\n");
-    print("  Charging: " + (charging ? "Yes" : "No") + "\n");
-    print("  Plugged In: " + (plugged ? "Yes" : "No") + "\n");
+    // Build status message as string
+    var msg = "";
+    msg += "Smart Charging v" + VERSION + "\n";
+    msg += "=".repeat(40) + "\n\n";
+
+    msg += "Schedule:\n";
+    msg += "  Window: " + pad(config.cheapWindowStart.hour) + ":" +
+           pad(config.cheapWindowStart.minute) + " to " +
+           pad(config.cheapWindowEnd.hour) + ":" +
+           pad(config.cheapWindowEnd.minute) + "\n";
+    msg += "  Target SOC: " + config.targetSOC + "%\n\n";
+
+    msg += "Vehicle:\n";
+    msg += "  SOC: " + soc.toFixed(1) + "%\n";
+    msg += "  Range: " + rangeMiles.toFixed(0) + " miles (" + rangeKm.toFixed(0) + " km)\n";
+    msg += "  Voltage: " + voltage.toFixed(1) + " V\n";
+    msg += "  Charging: " + (charging ? "Yes" : "No") + "\n";
     if (charging && power > 0) {
-        print("  Charge Power: " + power.toFixed(2) + " kW\n");
+        msg += "  Power: " + power.toFixed(2) + " kW\n";
     }
-    print("  Battery Voltage: " + voltage.toFixed(1) + " V\n");
-    if (temp !== null) {
-        print("  Battery Temp: " + temp.toFixed(0) + " °C\n");
-    }
-    print("  Est. Range: " + rangeMiles.toFixed(0) + " miles (" + rangeKm.toFixed(0) + " km)\n");
-    if (soh !== null) {
-        print("  State of Health: " + soh.toFixed(0) + " %\n");
-    }
+    msg += "  Plugged: " + (plugged ? "Yes" : "No") + "\n";
 
-    if (vehicleType) {
-        print("  Vehicle Type: " + vehicleType + "\n");
-    }
+    // Print to console
+    print("\n" + msg + "\n");
 
-    print("\n");
+    // Send to OVMS app (for button actions)
+    try {
+        OvmsNotify.Raise("info", "charge.status", msg);
+    } catch (e) {
+        print("[WARN] App notification failed\n");
+    }
 };
 
 /**
- * Debug - show internal state
+ * Debug display - show internal state for troubleshooting
  */
 exports.debug = function() {
-    print("\nDEBUG - Internal State\n");
-    print("=".repeat(50) + "\n");
-    print("session.monitoring: " + session.monitoring + "\n");
-    print("session.subscribed: " + session.subscribed + "\n");
-    print("config.targetSOC: " + config.targetSOC + "\n");
-    print("Current SOC: " + getSOC().toFixed(1) + "%\n");
-    print("Charging: " + getMetric("v.c.charging", false) + "\n");
-    print("Plugged: " + getMetric("v.c.pilot", false) + "\n");
-    print("\n");
-};
+    var soc = getMetric("v.b.soc", 0);
+    var charging = getMetric("v.c.charging", false);
+    var plugged = getMetric("v.c.pilot", false);
 
-/**
- * Info display (ABRP style) - shows raw metrics
- */
-exports.info = function() {
-    print("\n");
-    print("OVMS Smart Charging Metrics v" + VERSION + "\n");
-    print("=".repeat(50) + "\n");
+    var msg = "";
+    msg += "DEBUG - Internal State\n";
+    msg += "=".repeat(40) + "\n\n";
+    msg += "Session:\n";
+    msg += "  monitoring: " + session.monitoring + "\n\n";
+    msg += "Config:\n";
+    msg += "  targetSOC: " + config.targetSOC + "%\n";
+    msg += "  window: " + pad(config.cheapWindowStart.hour) + ":" +
+           pad(config.cheapWindowStart.minute) + " to " +
+           pad(config.cheapWindowEnd.hour) + ":" +
+           pad(config.cheapWindowEnd.minute) + "\n\n";
+    msg += "Metrics:\n";
+    msg += "  SOC: " + soc.toFixed(1) + "%\n";
+    msg += "  Charging: " + charging + "\n";
+    msg += "  Plugged: " + plugged + "\n";
 
-    function showMetric(label, value, unit) {
-        unit = unit || '';
-        print(label + ": " + value + " " + unit + "\n");
+    print("\n" + msg + "\n");
+
+    // Also send as notification for app button support
+    try {
+        OvmsNotify.Raise("info", "charge.debug", msg);
+    } catch (e) {
+        print("[WARN] App notification failed\n");
     }
-
-    var rangeKm = getMetric("v.b.range.est", 0);
-    var odometerKm = getMetric("v.p.odometer", 0);
-    var soh = getSOH();
-
-    showMetric("UTC Timestamp", Math.floor(Date.now() / 1000), "s");
-    showMetric("State of Charge", getSOC().toFixed(1), "%");
-    showMetric("Battery Power", getMetric("v.b.power", 0).toFixed(2), "kW");
-    showMetric("Charging", getMetric("v.c.charging", false) ? "true" : "false");
-    showMetric("Plugged In", getMetric("v.c.pilot", false) ? "true" : "false");
-    showMetric("Battery Voltage", getMetric("v.b.voltage", 0).toFixed(1), "V");
-    showMetric("Battery Current", getMetric("v.b.current", 0).toFixed(1), "A");
-    showMetric("Battery Temp", getMetric("v.b.temp", 0).toFixed(0), "°C");
-    if (soh !== null) {
-        showMetric("State of Health", soh.toFixed(0), "%");
-    }
-    showMetric("Estimated Range", kmToMiles(rangeKm).toFixed(0) + " miles (" + rangeKm.toFixed(0) + " km)");
-    showMetric("Odometer", kmToMiles(odometerKm).toFixed(1) + " miles (" + odometerKm.toFixed(1) + " km)");
-    if (vehicleType) {
-        showMetric("Vehicle Type", vehicleType);
-    }
-
-    print("\n");
 };
 
 // ============================================================================
@@ -450,13 +344,8 @@ exports.info = function() {
 loadConfig();
 
 // Subscribe ticker.60 ONCE at startup (not dynamically)
-// Track subscription state to prevent duplicates
-if (!session.subscribed) {
-    PubSub.subscribe("ticker.60", monitorSOC);
-    session.subscribed = true;
-    console.info("Subscribed to ticker.60");
-}
+PubSub.subscribe("ticker.60", monitorSOC);
 
-console.info("Config loaded - Target: " + config.targetSOC + "%");
-console.info("Ready for operation");
+print("[INIT] Config loaded - Target: " + config.targetSOC + "%\n");
+print("[INIT] Ready for operation\n");
 print("=".repeat(50) + "\n\n");
