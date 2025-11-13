@@ -1,8 +1,8 @@
 /**
  * OVMS Smart Charging Scheduler - Enhanced Stable Version
  *
- * VERSION: 2.0.5.1-20251110-1930
- * BUILD: Fixed unreliable Leaf instrument metrics, added UK miles conversion
+ * VERSION: 2.0.6-20251113-0800
+ * BUILD: Removed verbose monitoring logs to prevent websocket overflow
  *
  * ENHANCEMENTS FROM v2.0.4:
  * - Logger utility with timestamps (borrowed from ABRP)
@@ -29,7 +29,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-const VERSION = "2.0.5.1-20251110-1930";
+const VERSION = "2.0.6-20251113-0800";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -240,17 +240,13 @@ function monitorSOC() {
 
         var charging = getMetric("v.c.charging", false);
         if (!charging) {
-            console.info("Monitor: Charging stopped externally");
             session.monitoring = false;
             return;
         }
 
         var soc = getSOC();
 
-        // Log every check for debugging
-        console.info("Monitor: SOC=" + soc.toFixed(1) + "% Target=" + config.targetSOC + "%");
-
-        // Check target
+        // Check target (no logging - reduces websocket overflow)
         if (soc >= config.targetSOC) {
             console.info("Target reached: " + soc.toFixed(1) + "% (target " + config.targetSOC + "%)");
 
