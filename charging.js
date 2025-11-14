@@ -1,10 +1,17 @@
 /**
  * OVMS Smart Charging Scheduler - Minimal Stable Version
  *
- * VERSION: 2.0.7-20251113-1400
- * BUILD: Minimal + UK miles + app button support
+ * VERSION: 2.0.7.1-20251114-1000
+ * BUILD: Added priority modes (target vs window)
  *
- * BASED ON: v2.0.4 (proven stable 278-line baseline)
+ * BASED ON: v2.0.7 (352 lines, app button working)
+ *
+ * NEW IN v2.0.7.1:
+ * - Priority modes: "target" (default) vs "window"
+ * - "target" mode: Always charge to target SOC (window guides start time only)
+ * - "window" mode: Stop at window end regardless of SOC (strict cost control)
+ * - setPriority() command to change and persist mode
+ * - Status display shows current priority mode
  *
  * ENHANCEMENTS FROM v2.0.4:
  * - UK miles conversion for range display
@@ -21,6 +28,7 @@
  * USAGE:
  * script eval charging.setSchedule(23,30,5,30)  - Set cheap window
  * script eval charging.setLimits(80)             - Set target to 80%
+ * script eval charging.setPriority(target)       - Set priority mode (target or window)
  * script eval charging.status()                  - Show status (works in console AND app button)
  * script eval charging.debug()                   - Show internal state for troubleshooting
  */
@@ -29,7 +37,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "2.0.7-20251113-1400";
+var VERSION = "2.0.7.1-20251114-1000";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -46,7 +54,8 @@ print("=".repeat(50) + "\n");
 var config = {
     cheapWindowStart: { hour: 23, minute: 30 },
     cheapWindowEnd: { hour: 5, minute: 30 },
-    targetSOC: 80
+    targetSOC: 80,
+    chargePriority: "target"  // "target" = always reach target, "window" = stop at window end
 };
 
 var session = {
@@ -73,6 +82,13 @@ function loadConfig() {
             config.cheapWindowStart.minute = parseInt(OvmsConfig.Get("usr", "charging.window.start.minute") || "0");
             config.cheapWindowEnd.hour = parseInt(OvmsConfig.Get("usr", "charging.window.end.hour") || "0");
             config.cheapWindowEnd.minute = parseInt(OvmsConfig.Get("usr", "charging.window.end.minute") || "0");
+        }
+
+        var priority = OvmsConfig.Get("usr", "charging.priority");
+        if (priority && priority !== "") {
+            if (priority === "target" || priority === "window") {
+                config.chargePriority = priority;
+            }
         }
     } catch (e) {
         print("[ERROR] Load config: " + e.message + "\n");
@@ -217,10 +233,13 @@ exports.checkSchedule = function() {
             print("[SCHEDULE] Auto-start\n");
             exports.start();
         }
-        // Auto-stop outside window
+        // Auto-stop outside window (only if priority mode is "window")
         else if (!inWindow && charging) {
-            print("[SCHEDULE] Auto-stop\n");
-            exports.stop();
+            if (config.chargePriority === "window") {
+                print("[SCHEDULE] Window ended, stopping (window mode)\n");
+                exports.stop();
+            }
+            // If "target" mode: do nothing, monitorSOC will stop at target SOC
         }
     } catch (e) {
         // Silent fail
@@ -257,6 +276,24 @@ exports.setLimits = function(target) {
     return true;
 };
 
+exports.setPriority = function(mode) {
+    if (mode !== "target" && mode !== "window") {
+        print("[CONFIG] Invalid priority mode: " + mode + "\n");
+        print("[CONFIG] Valid modes: target, window\n");
+        return false;
+    }
+
+    config.chargePriority = mode;
+    saveValue("charging.priority", mode);
+
+    var desc = mode === "target" ?
+        "Always reach target SOC (window guides start time)" :
+        "Stop at window end (strict cost control)";
+
+    print("[CONFIG] Priority: " + mode + " - " + desc + "\n");
+    return true;
+};
+
 /**
  * Status display - works in console AND OVMS app buttons
  * Uses string building + OvmsNotify pattern for app compatibility
@@ -280,7 +317,9 @@ exports.status = function() {
            pad(config.cheapWindowStart.minute) + " to " +
            pad(config.cheapWindowEnd.hour) + ":" +
            pad(config.cheapWindowEnd.minute) + "\n";
-    msg += "  Target SOC: " + config.targetSOC + "%\n\n";
+    msg += "  Target SOC: " + config.targetSOC + "%\n";
+    msg += "  Priority: " + config.chargePriority +
+           (config.chargePriority === "target" ? " (reach target)" : " (stop at window end)") + "\n\n";
 
     msg += "Vehicle:\n";
     msg += "  SOC: " + soc.toFixed(1) + "%\n";
@@ -318,6 +357,7 @@ exports.debug = function() {
     msg += "  monitoring: " + session.monitoring + "\n\n";
     msg += "Config:\n";
     msg += "  targetSOC: " + config.targetSOC + "%\n";
+    msg += "  chargePriority: " + config.chargePriority + "\n";
     msg += "  window: " + pad(config.cheapWindowStart.hour) + ":" +
            pad(config.cheapWindowStart.minute) + " to " +
            pad(config.cheapWindowEnd.hour) + ":" +
