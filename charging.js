@@ -1,10 +1,17 @@
 /**
  * OVMS Smart Charging Scheduler - Minimal Stable Version
  *
- * VERSION: 2.0.7.1-20251114-1000
- * BUILD: Added priority modes (target vs window)
+ * VERSION: 2.0.7.2-20251114-1200
+ * BUILD: Persistent monitoring + enhanced status display
  *
- * BASED ON: v2.0.7 (352 lines, app button working)
+ * BASED ON: v2.0.7.1 (391 lines, priority modes working)
+ *
+ * NEW IN v2.0.7.2:
+ * - Persistent monitoring state (survives reboots/firmware updates)
+ * - Orphaned session detection (resumes monitoring after reboot)
+ * - Enhanced status() shows monitoring state and expected behavior
+ * - Status tells you: ACTIVE (managing), INACTIVE (manual), or Ready (scheduled)
+ * - Fixes issue where reboot during charge lost tracking
  *
  * NEW IN v2.0.7.1:
  * - Priority modes: "target" (default) vs "window"
@@ -37,7 +44,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "2.0.7.1-20251114-1000";
+var VERSION = "2.0.7.2-20251114-1200";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -89,6 +96,12 @@ function loadConfig() {
             if (priority === "target" || priority === "window") {
                 config.chargePriority = priority;
             }
+        }
+
+        // Restore monitoring state (survives reboots)
+        var monitoring = OvmsConfig.Get("usr", "charging.monitoring");
+        if (monitoring === "true") {
+            session.monitoring = true;
         }
     } catch (e) {
         print("[ERROR] Load config: " + e.message + "\n");
@@ -144,6 +157,8 @@ exports.start = function() {
 
     try {
         session.monitoring = true;
+        saveValue("charging.monitoring", "true");  // Persist monitoring state
+
         OvmsCommand.Exec("charge start");
         print("[START] Charging started: " + soc.toFixed(0) + "% → " + config.targetSOC + "%\n");
 
@@ -163,6 +178,8 @@ exports.start = function() {
 exports.stop = function() {
     try {
         session.monitoring = false;
+        saveValue("charging.monitoring", "false");  // Persist monitoring state
+
         OvmsCommand.Exec("charge stop");
         print("[STOP] Charging stopped\n");
         return true;
@@ -319,7 +336,24 @@ exports.status = function() {
            pad(config.cheapWindowEnd.minute) + "\n";
     msg += "  Target SOC: " + config.targetSOC + "%\n";
     msg += "  Priority: " + config.chargePriority +
-           (config.chargePriority === "target" ? " (reach target)" : " (stop at window end)") + "\n\n";
+           (config.chargePriority === "target" ? " (reach target)" : " (stop at window end)") + "\n";
+
+    // Show monitoring state and expected behavior
+    if (session.monitoring) {
+        msg += "  Status: ACTIVE - will stop at " + config.targetSOC + "%";
+        if (config.chargePriority === "window") {
+            msg += " or window end";
+        }
+        msg += "\n";
+    } else {
+        if (charging) {
+            msg += "  Status: INACTIVE (manual charge, no auto-stop)\n";
+        } else {
+            msg += "  Status: Ready (will auto-start at " +
+                   pad(config.cheapWindowStart.hour) + ":" + pad(config.cheapWindowStart.minute) + ")\n";
+        }
+    }
+    msg += "\n";
 
     msg += "Vehicle:\n";
     msg += "  SOC: " + soc.toFixed(1) + "%\n";
@@ -383,9 +417,23 @@ exports.debug = function() {
 
 loadConfig();
 
+// Detect orphaned charge sessions (after reboot during active charge)
+if (session.monitoring) {
+    var charging = getMetric("v.c.charging", false);
+    if (charging) {
+        var soc = getMetric("v.b.soc", 0);
+        print("[INIT] Resuming monitoring: " + soc.toFixed(0) + "% → " + config.targetSOC + "% (survived reboot)\n");
+    } else {
+        // Was monitoring but not charging anymore - clear state
+        session.monitoring = false;
+        saveValue("charging.monitoring", "false");
+    }
+}
+
 // Subscribe ticker.60 ONCE at startup (not dynamically)
 PubSub.subscribe("ticker.60", monitorSOC);
 
 print("[INIT] Config loaded - Target: " + config.targetSOC + "%\n");
+print("[INIT] Priority: " + config.chargePriority + "\n");
 print("[INIT] Ready for operation\n");
 print("=".repeat(50) + "\n\n");
