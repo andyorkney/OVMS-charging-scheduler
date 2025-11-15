@@ -1,14 +1,19 @@
 /**
  * OVMS Smart Charging Scheduler - Minimal Stable Version
  *
- * VERSION: 2.0.7.2-20251114-1200
- * BUILD: Persistent monitoring + enhanced status display
+ * VERSION: 2.0.7.3-20251115-1100
+ * BUILD: Fixed JS reload stall issue
  *
- * BASED ON: v2.0.7.1 (391 lines, priority modes working)
+ * BASED ON: v2.0.7.2 (439 lines, persistent monitoring working)
+ *
+ * NEW IN v2.0.7.3:
+ * - Removed orphaned session detection from init (was causing JS reload stalls)
+ * - Simpler initialization (no getMetric/saveValue calls during module load)
+ * - Monitoring state still persists and restores, just no active validation
+ * - Fixes JS reload hanging with broken poller firmware
  *
  * NEW IN v2.0.7.2:
  * - Persistent monitoring state (survives reboots/firmware updates)
- * - Orphaned session detection (resumes monitoring after reboot)
  * - Enhanced status() shows monitoring state and expected behavior
  * - Status tells you: ACTIVE (managing), INACTIVE (manual), or Ready (scheduled)
  * - Fixes issue where reboot during charge lost tracking
@@ -44,7 +49,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "2.0.7.2-20251114-1200";
+var VERSION = "2.0.7.3-20251115-1100";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -417,23 +422,13 @@ exports.debug = function() {
 
 loadConfig();
 
-// Detect orphaned charge sessions (after reboot during active charge)
-if (session.monitoring) {
-    var charging = getMetric("v.c.charging", false);
-    if (charging) {
-        var soc = getMetric("v.b.soc", 0);
-        print("[INIT] Resuming monitoring: " + soc.toFixed(0) + "% → " + config.targetSOC + "% (survived reboot)\n");
-    } else {
-        // Was monitoring but not charging anymore - clear state
-        session.monitoring = false;
-        saveValue("charging.monitoring", "false");
-    }
-}
-
 // Subscribe ticker.60 ONCE at startup (not dynamically)
 PubSub.subscribe("ticker.60", monitorSOC);
 
 print("[INIT] Config loaded - Target: " + config.targetSOC + "%\n");
 print("[INIT] Priority: " + config.chargePriority + "\n");
+if (session.monitoring) {
+    print("[INIT] Monitoring active (restored from config)\n");
+}
 print("[INIT] Ready for operation\n");
 print("=".repeat(50) + "\n\n");
