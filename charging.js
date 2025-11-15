@@ -329,46 +329,41 @@ exports.status = function() {
     var voltage = getMetric("v.b.voltage", 0);
     var power = getMetric("v.c.power", 0);
 
-    // Build status message as string
+    // Build status message - MOST IMPORTANT INFO FIRST (for app preview)
     var msg = "";
-    msg += "Smart Charging v" + VERSION + "\n";
-    msg += "=".repeat(40) + "\n\n";
 
-    msg += "Schedule:\n";
-    msg += "  Window: " + pad(config.cheapWindowStart.hour) + ":" +
-           pad(config.cheapWindowStart.minute) + " to " +
-           pad(config.cheapWindowEnd.hour) + ":" +
-           pad(config.cheapWindowEnd.minute) + "\n";
-    msg += "  Target SOC: " + config.targetSOC + "%\n";
-    msg += "  Priority: " + config.chargePriority +
-           (config.chargePriority === "target" ? " (reach target)" : " (stop at window end)") + "\n";
-
-    // Show monitoring state and expected behavior
+    // Line 1: Status/monitoring state (most critical)
     if (session.monitoring) {
-        msg += "  Status: ACTIVE - will stop at " + config.targetSOC + "%";
-        if (config.chargePriority === "window") {
-            msg += " or window end";
+        msg += "ACTIVE: " + soc.toFixed(0) + "% → " + config.targetSOC + "%";
+        if (charging) {
+            msg += " (charging)";
         }
-        msg += "\n";
     } else {
         if (charging) {
-            msg += "  Status: INACTIVE (manual charge, no auto-stop)\n";
+            msg += "MANUAL: " + soc.toFixed(0) + "% (no auto-stop)";
         } else {
-            msg += "  Status: Ready (will auto-start at " +
-                   pad(config.cheapWindowStart.hour) + ":" + pad(config.cheapWindowStart.minute) + ")\n";
+            msg += "READY: " + soc.toFixed(0) + "% | Target " + config.targetSOC + "%";
         }
     }
     msg += "\n";
 
-    msg += "Vehicle:\n";
-    msg += "  SOC: " + soc.toFixed(1) + "%\n";
-    msg += "  Range: " + rangeMiles.toFixed(0) + " miles (" + rangeKm.toFixed(0) + " km)\n";
-    msg += "  Voltage: " + voltage.toFixed(1) + " V\n";
-    msg += "  Charging: " + (charging ? "Yes" : "No") + "\n";
+    // Line 2: Range and plugged status (quick reference)
+    msg += rangeMiles.toFixed(0) + " miles | " + (plugged ? "Plugged" : "Unplugged");
     if (charging && power > 0) {
-        msg += "  Power: " + power.toFixed(2) + " kW\n";
+        msg += " | " + power.toFixed(1) + "kW";
     }
-    msg += "  Plugged: " + (plugged ? "Yes" : "No") + "\n";
+    msg += "\n";
+
+    // Rest of details
+    msg += "----------------------------------------\n";
+    msg += "Schedule: " + pad(config.cheapWindowStart.hour) + ":" +
+           pad(config.cheapWindowStart.minute) + "-" +
+           pad(config.cheapWindowEnd.hour) + ":" +
+           pad(config.cheapWindowEnd.minute) + "\n";
+    msg += "Priority: " + config.chargePriority +
+           (config.chargePriority === "target" ? " (reach target)" : " (stop at window end)") + "\n";
+    msg += "Voltage: " + voltage.toFixed(1) + "V\n";
+    msg += "v" + VERSION + "\n";
 
     // Print to console
     print("\n" + msg + "\n");
