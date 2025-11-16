@@ -38,7 +38,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-const VERSION = "2.1.0-20251116-1200";
+var VERSION = "2.1.0-20251116-1200";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -74,13 +74,13 @@ function logger() {
         log('(' + timestamp() + ') WARN: ' + message, obj);
     }
 
-    return { debug, error, info, log, warn };
+    return { debug: debug, error: error, info: info, log: log, warn: warn };
 }
 
-const console = logger();
+var console = logger();
 
 console.info("OVMS Smart Charging v" + VERSION);
-print("=".repeat(50) + "\n");
+print(repeatString("=", 50) + "\n");
 
 // ============================================================================
 // VEHICLE TYPE DETECTION
@@ -156,6 +156,17 @@ function saveValue(key, value) {
 
 function pad(n) {
     return n < 10 ? "0" + n : n.toString();
+}
+
+/**
+ * Repeat string n times (ES5.1 compatible - no .repeat() method)
+ */
+function repeatString(str, count) {
+    var result = "";
+    for (var i = 0; i < count; i++) {
+        result += str;
+    }
+    return result;
 }
 
 /**
@@ -369,7 +380,7 @@ function monitorSOC() {
 // ============================================================================
 
 exports.checkSchedule = function() {
-    var startTime = performance.now();  // Performance monitoring
+    var startTime = Date.now();  // Performance monitoring (ES5.1 compatible)
 
     try {
         var now = new Date();
@@ -400,9 +411,9 @@ exports.checkSchedule = function() {
         console.error("checkSchedule failed", e);
     } finally {
         // Performance warning if slow
-        var duration = performance.now() - startTime;
+        var duration = Date.now() - startTime;
         if (duration > 500) {
-            console.warn("checkSchedule took " + duration.toFixed(0) + " ms");
+            console.warn("checkSchedule took " + duration + " ms");
         }
     }
 };
@@ -577,7 +588,7 @@ function retryClimateCommand() {
  */
 exports.climateStatus = function() {
     print("\nClimate Control Status\n");
-    print("=".repeat(50) + "\n");
+    print(repeatString("=", 50) + "\n");
     print("  Wake Retry Enabled: " + (config.climateWakeRetry ? "Yes" : "No") + "\n");
     print("  Wake Delay: " + config.climateWakeDelay + " ms\n");
     print("  Retry Pending: " + (session.climateRetryPending ? "Yes" : "No") + "\n");
@@ -697,7 +708,7 @@ function executeWithWake(commandName, commandFn) {
  */
 exports.securityStatus = function() {
     print("\nSecurity Command Status\n");
-    print("=".repeat(50) + "\n");
+    print(repeatString("=", 50) + "\n");
     print("  Vehicle Awake: " + (isVehicleAwake() ? "Yes" : "No") + "\n");
     print("  Lock Wake Delay: " + config.lockWakeDelay + " ms\n");
     print("  Wake In Progress: " + (session.wakeInProgress ? "Yes" : "No") + "\n");
@@ -713,7 +724,7 @@ exports.securityStatus = function() {
 exports.status = function() {
     print("\n");
     print("OVMS Smart Charging v" + VERSION + "\n");
-    print("=".repeat(50) + "\n");
+    print(repeatString("=", 50) + "\n");
 
     // Schedule
     print("Schedule:\n");
@@ -761,7 +772,7 @@ exports.status = function() {
  */
 exports.debug = function() {
     print("\nDEBUG - Internal State\n");
-    print("=".repeat(50) + "\n");
+    print(repeatString("=", 50) + "\n");
     print("session.monitoring: " + session.monitoring + "\n");
     print("session.subscribed: " + session.subscribed + "\n");
     print("config.targetSOC: " + config.targetSOC + "\n");
@@ -777,7 +788,7 @@ exports.debug = function() {
 exports.info = function() {
     print("\n");
     print("OVMS Smart Charging Metrics v" + VERSION + "\n");
-    print("=".repeat(50) + "\n");
+    print(repeatString("=", 50) + "\n");
 
     function showMetric(label, value, unit) {
         unit = unit || '';
@@ -824,4 +835,4 @@ if (!session.subscribed) {
 
 console.info("Config loaded - Target: " + config.targetSOC + "%");
 console.info("Ready for operation");
-print("=".repeat(50) + "\n\n");
+print(repeatString("=", 50) + "\n\n");
