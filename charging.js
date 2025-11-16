@@ -152,59 +152,86 @@ var state = {
 
 function loadConfig() {
     try {
-        var val;
+        var val, parsed;
 
         val = OvmsConfig.Get("usr", "charging.target_soc");
         if (val && val !== "") {
-            var t = parseInt(val);
-            if (!isNaN(t) && t >= 20 && t <= 100) {
-                config.targetSOC = t;
+            parsed = parseInt(val);
+            if (!isNaN(parsed) && parsed >= 20 && parsed <= 100) {
+                config.targetSOC = parsed;
             }
         }
 
         val = OvmsConfig.Get("usr", "charging.ready_by_hour");
         if (val && val !== "") {
-            config.readyByHour = parseInt(val);
+            parsed = parseInt(val);
+            if (!isNaN(parsed) && parsed >= 0 && parsed <= 23) {
+                config.readyByHour = parsed;
+            }
         }
 
         val = OvmsConfig.Get("usr", "charging.ready_by_minute");
         if (val && val !== "") {
-            config.readyByMinute = parseInt(val);
+            parsed = parseInt(val);
+            if (!isNaN(parsed) && parsed >= 0 && parsed <= 59) {
+                config.readyByMinute = parsed;
+            }
         }
 
         val = OvmsConfig.Get("usr", "charging.cheap_start_hour");
         if (val && val !== "") {
-            config.cheapWindowStart.hour = parseInt(val);
+            parsed = parseInt(val);
+            if (!isNaN(parsed) && parsed >= 0 && parsed <= 23) {
+                config.cheapWindowStart.hour = parsed;
+            }
         }
 
         val = OvmsConfig.Get("usr", "charging.cheap_start_minute");
         if (val && val !== "") {
-            config.cheapWindowStart.minute = parseInt(val);
+            parsed = parseInt(val);
+            if (!isNaN(parsed) && parsed >= 0 && parsed <= 59) {
+                config.cheapWindowStart.minute = parsed;
+            }
         }
 
         val = OvmsConfig.Get("usr", "charging.cheap_end_hour");
         if (val && val !== "") {
-            config.cheapWindowEnd.hour = parseInt(val);
+            parsed = parseInt(val);
+            if (!isNaN(parsed) && parsed >= 0 && parsed <= 23) {
+                config.cheapWindowEnd.hour = parsed;
+            }
         }
 
         val = OvmsConfig.Get("usr", "charging.cheap_end_minute");
         if (val && val !== "") {
-            config.cheapWindowEnd.minute = parseInt(val);
+            parsed = parseInt(val);
+            if (!isNaN(parsed) && parsed >= 0 && parsed <= 59) {
+                config.cheapWindowEnd.minute = parsed;
+            }
         }
 
         val = OvmsConfig.Get("usr", "charging.cheap_rate");
         if (val && val !== "") {
-            config.cheapRate = parseFloat(val);
+            parsed = parseFloat(val);
+            if (!isNaN(parsed) && parsed > 0) {
+                config.cheapRate = parsed;
+            }
         }
 
         val = OvmsConfig.Get("usr", "charging.standard_rate");
         if (val && val !== "") {
-            config.standardRate = parseFloat(val);
+            parsed = parseFloat(val);
+            if (!isNaN(parsed) && parsed > 0) {
+                config.standardRate = parsed;
+            }
         }
 
         val = OvmsConfig.Get("usr", "charging.charger_rate");
         if (val && val !== "") {
-            config.chargerRate = parseFloat(val);
+            parsed = parseFloat(val);
+            if (!isNaN(parsed) && parsed > 0) {
+                config.chargerRate = parsed;
+            }
         }
 
     } catch (e) {
