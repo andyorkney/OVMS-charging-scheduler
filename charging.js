@@ -38,7 +38,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "2.1.0-20251116-1200";
+var VERSION = "3.0.0-20251116-APP";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -720,51 +720,64 @@ exports.securityStatus = function() {
 
 /**
  * Enhanced status display with units and vehicle info
+ * Sends to BOTH console (print) AND app (OvmsNotify)
  */
 exports.status = function() {
-    print("\n");
-    print("OVMS Smart Charging v" + VERSION + "\n");
-    print(repeatString("=", 50) + "\n");
-
-    // Schedule
-    print("Schedule:\n");
-    print("  Cheap window: " + pad(config.cheapWindowStart.hour) + ":" +
-          pad(config.cheapWindowStart.minute) + " to " +
-          pad(config.cheapWindowEnd.hour) + ":" + pad(config.cheapWindowEnd.minute) + "\n");
-    print("  Target SOC: " + config.targetSOC + " %\n");
-
-    // Vehicle state
     var soc = getSOC();
     var charging = getMetric("v.c.charging", false);
     var plugged = getMetric("v.c.pilot", false);
     var power = getMetric("v.c.power", 0);
     var voltage = getMetric("v.b.voltage", 0);
-    var temp = getMetric("v.b.temp", null);
     var rangeKm = getMetric("v.b.range.est", 0);
     var rangeMiles = kmToMiles(rangeKm);
     var soh = getSOH();
 
-    print("\nVehicle:\n");
-    print("  State of Charge: " + soc.toFixed(1) + " %\n");
-    print("  Charging: " + (charging ? "Yes" : "No") + "\n");
-    print("  Plugged In: " + (plugged ? "Yes" : "No") + "\n");
+    // Build status message - MOST IMPORTANT INFO FIRST (for app preview)
+    var msg = "";
+
+    // Line 1: Status/monitoring state (most critical)
+    if (session.monitoring) {
+        msg += "ACTIVE: " + soc.toFixed(0) + "% → " + config.targetSOC + "%";
+        if (charging) {
+            msg += " (charging)";
+        }
+    } else {
+        if (charging) {
+            msg += "MANUAL: " + soc.toFixed(0) + "% (no auto-stop)";
+        } else {
+            msg += "READY: " + soc.toFixed(0) + "% | Target " + config.targetSOC + "%";
+        }
+    }
+    msg += "\n";
+
+    // Line 2: Range and plugged status (quick reference)
+    msg += rangeMiles.toFixed(0) + " miles | " + (plugged ? "Plugged" : "Unplugged");
     if (charging && power > 0) {
-        print("  Charge Power: " + power.toFixed(2) + " kW\n");
+        msg += " | " + power.toFixed(1) + "kW";
     }
-    print("  Battery Voltage: " + voltage.toFixed(1) + " V\n");
-    if (temp !== null) {
-        print("  Battery Temp: " + temp.toFixed(0) + " °C\n");
-    }
-    print("  Est. Range: " + rangeMiles.toFixed(0) + " miles (" + rangeKm.toFixed(0) + " km)\n");
+    msg += "\n";
+
+    // Rest of details
+    msg += "----------------------------------------\n";
+    msg += "Schedule: " + pad(config.cheapWindowStart.hour) + ":" +
+           pad(config.cheapWindowStart.minute) + "-" +
+           pad(config.cheapWindowEnd.hour) + ":" +
+           pad(config.cheapWindowEnd.minute) + "\n";
+    msg += "Voltage: " + voltage.toFixed(1) + "V\n";
     if (soh !== null) {
-        print("  State of Health: " + soh.toFixed(0) + " %\n");
+        msg += "SOH: " + soh.toFixed(0) + "%\n";
     }
+    msg += "v" + VERSION + "\n";
 
-    if (vehicleType) {
-        print("  Vehicle Type: " + vehicleType + "\n");
+    // Print to console
+    print("\n" + msg + "\n");
+
+    // Send to OVMS app (for button actions)
+    try {
+        OvmsNotify.Raise("info", "charge.status", msg);
+    } catch (e) {
+        print("[WARN] App notification failed\n");
     }
-
-    print("\n");
 };
 
 /**
@@ -784,39 +797,42 @@ exports.debug = function() {
 
 /**
  * Info display (ABRP style) - shows raw metrics
+ * Sends to BOTH console (print) AND app (OvmsNotify)
  */
 exports.info = function() {
-    print("\n");
-    print("OVMS Smart Charging Metrics v" + VERSION + "\n");
-    print(repeatString("=", 50) + "\n");
-
-    function showMetric(label, value, unit) {
-        unit = unit || '';
-        print(label + ": " + value + " " + unit + "\n");
-    }
-
     var rangeKm = getMetric("v.b.range.est", 0);
     var odometerKm = getMetric("v.p.odometer", 0);
     var soh = getSOH();
 
-    showMetric("UTC Timestamp", Math.floor(Date.now() / 1000), "s");
-    showMetric("State of Charge", getSOC().toFixed(1), "%");
-    showMetric("Battery Power", getMetric("v.b.power", 0).toFixed(2), "kW");
-    showMetric("Charging", getMetric("v.c.charging", false) ? "true" : "false");
-    showMetric("Plugged In", getMetric("v.c.pilot", false) ? "true" : "false");
-    showMetric("Battery Voltage", getMetric("v.b.voltage", 0).toFixed(1), "V");
-    showMetric("Battery Current", getMetric("v.b.current", 0).toFixed(1), "A");
-    showMetric("Battery Temp", getMetric("v.b.temp", 0).toFixed(0), "°C");
+    // Build info message
+    var msg = "OVMS Smart Charging Metrics\n";
+    msg += "----------------------------------------\n";
+    msg += "SOC: " + getSOC().toFixed(1) + "%\n";
+    msg += "Power: " + getMetric("v.b.power", 0).toFixed(2) + " kW\n";
+    msg += "Charging: " + (getMetric("v.c.charging", false) ? "Yes" : "No") + "\n";
+    msg += "Plugged: " + (getMetric("v.c.pilot", false) ? "Yes" : "No") + "\n";
+    msg += "Voltage: " + getMetric("v.b.voltage", 0).toFixed(1) + " V\n";
+    msg += "Current: " + getMetric("v.b.current", 0).toFixed(1) + " A\n";
+    msg += "Temp: " + getMetric("v.b.temp", 0).toFixed(0) + " °C\n";
     if (soh !== null) {
-        showMetric("State of Health", soh.toFixed(0), "%");
+        msg += "SOH: " + soh.toFixed(0) + "%\n";
     }
-    showMetric("Estimated Range", kmToMiles(rangeKm).toFixed(0) + " miles (" + rangeKm.toFixed(0) + " km)");
-    showMetric("Odometer", kmToMiles(odometerKm).toFixed(1) + " miles (" + odometerKm.toFixed(1) + " km)");
+    msg += "Range: " + kmToMiles(rangeKm).toFixed(0) + " mi (" + rangeKm.toFixed(0) + " km)\n";
+    msg += "Odometer: " + kmToMiles(odometerKm).toFixed(0) + " mi\n";
     if (vehicleType) {
-        showMetric("Vehicle Type", vehicleType);
+        msg += "Type: " + vehicleType + "\n";
     }
+    msg += "v" + VERSION + "\n";
 
-    print("\n");
+    // Print to console
+    print("\n" + msg + "\n");
+
+    // Send to OVMS app
+    try {
+        OvmsNotify.Raise("info", "charge.info", msg);
+    } catch (e) {
+        print("[WARN] App notification failed\n");
+    }
 };
 
 // ============================================================================
