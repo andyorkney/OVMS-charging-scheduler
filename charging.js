@@ -37,7 +37,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "3.2.1";
+var VERSION = "3.2.3";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -158,6 +158,13 @@ function loadConfig() {
         var val, parsed;
 
         val = OvmsConfig.Get("usr", "charging.target_soc");
+        if (!val || val === "") {
+            // Try legacy key names for backward compatibility
+            val = OvmsConfig.Get("usr", "charging.target.soc");
+        }
+        if (!val || val === "") {
+            val = OvmsConfig.Get("usr", "charge.target_soc");
+        }
         if (val && val !== "") {
             parsed = parseInt(val);
             if (!isNaN(parsed) && parsed >= 20 && parsed <= 100) {
@@ -166,6 +173,10 @@ function loadConfig() {
         }
 
         val = OvmsConfig.Get("usr", "charging.ready_by_hour");
+        if (!val || val === "") {
+            // Try legacy key names for backward compatibility
+            val = OvmsConfig.Get("usr", "charging.readyby.hour");
+        }
         if (val && val !== "") {
             parsed = parseInt(val);
             if (!isNaN(parsed) && parsed >= 0 && parsed <= 23) {
@@ -174,6 +185,9 @@ function loadConfig() {
         }
 
         val = OvmsConfig.Get("usr", "charging.ready_by_minute");
+        if (!val || val === "") {
+            val = OvmsConfig.Get("usr", "charging.readyby.minute");
+        }
         if (val && val !== "") {
             parsed = parseInt(val);
             if (!isNaN(parsed) && parsed >= 0 && parsed <= 59) {
@@ -182,6 +196,12 @@ function loadConfig() {
         }
 
         val = OvmsConfig.Get("usr", "charging.cheap_start_hour");
+        if (!val || val === "") {
+            val = OvmsConfig.Get("usr", "charging.window.start.hour");
+        }
+        if (!val || val === "") {
+            val = OvmsConfig.Get("usr", "charging.schedule.start.hour");
+        }
         if (val && val !== "") {
             parsed = parseInt(val);
             if (!isNaN(parsed) && parsed >= 0 && parsed <= 23) {
@@ -190,6 +210,12 @@ function loadConfig() {
         }
 
         val = OvmsConfig.Get("usr", "charging.cheap_start_minute");
+        if (!val || val === "") {
+            val = OvmsConfig.Get("usr", "charging.window.start.minute");
+        }
+        if (!val || val === "") {
+            val = OvmsConfig.Get("usr", "charging.schedule.start.minute");
+        }
         if (val && val !== "") {
             parsed = parseInt(val);
             if (!isNaN(parsed) && parsed >= 0 && parsed <= 59) {
@@ -198,6 +224,12 @@ function loadConfig() {
         }
 
         val = OvmsConfig.Get("usr", "charging.cheap_end_hour");
+        if (!val || val === "") {
+            val = OvmsConfig.Get("usr", "charging.window.end.hour");
+        }
+        if (!val || val === "") {
+            val = OvmsConfig.Get("usr", "charging.schedule.end.hour");
+        }
         if (val && val !== "") {
             parsed = parseInt(val);
             if (!isNaN(parsed) && parsed >= 0 && parsed <= 23) {
@@ -206,6 +238,12 @@ function loadConfig() {
         }
 
         val = OvmsConfig.Get("usr", "charging.cheap_end_minute");
+        if (!val || val === "") {
+            val = OvmsConfig.Get("usr", "charging.window.end.minute");
+        }
+        if (!val || val === "") {
+            val = OvmsConfig.Get("usr", "charging.schedule.end.minute");
+        }
         if (val && val !== "") {
             parsed = parseInt(val);
             if (!isNaN(parsed) && parsed >= 0 && parsed <= 59) {
@@ -214,6 +252,9 @@ function loadConfig() {
         }
 
         val = OvmsConfig.Get("usr", "charging.cheap_rate");
+        if (!val || val === "") {
+            val = OvmsConfig.Get("usr", "charging.pricing.cheap");
+        }
         if (val && val !== "") {
             parsed = parseFloat(val);
             if (!isNaN(parsed) && parsed > 0) {
@@ -222,6 +263,9 @@ function loadConfig() {
         }
 
         val = OvmsConfig.Get("usr", "charging.standard_rate");
+        if (!val || val === "") {
+            val = OvmsConfig.Get("usr", "charging.pricing.standard");
+        }
         if (val && val !== "") {
             parsed = parseFloat(val);
             if (!isNaN(parsed) && parsed > 0) {
@@ -666,6 +710,12 @@ function monitorSOC() {
 // ============================================================================
 
 function onPlugIn() {
+    // Guard against double-firing (can happen if both events trigger)
+    if (state.scheduledStartTime !== null) {
+        console.info("onPlugIn: Schedule already set, ignoring duplicate event");
+        return;
+    }
+
     console.info("Vehicle plugged in - calculating schedule");
 
     var currentSOC = getSOC();
