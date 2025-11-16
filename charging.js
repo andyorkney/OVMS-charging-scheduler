@@ -37,7 +37,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "3.2.0";
+var VERSION = "3.2.1";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -137,9 +137,12 @@ var state = {
     retryCount: 0,
     retryTimerId: null,
 
-    // Schedule info
+    // Schedule info (stored on plug-in)
     scheduledStartTime: null,
     scheduledEndTime: null,
+    scheduledKwhNeeded: null,
+    scheduledHoursNeeded: null,
+    scheduledCosts: null,
 
     // Timer management
     pendingTimers: [],
@@ -691,9 +694,12 @@ function onPlugIn() {
         // May not have started yet
     }
 
-    // Store schedule
+    // Store full schedule info
     state.scheduledStartTime = schedule.scheduledStartMin;
     state.scheduledEndTime = schedule.scheduledEndMin;
+    state.scheduledKwhNeeded = schedule.kwhNeeded;
+    state.scheduledHoursNeeded = schedule.hoursNeeded;
+    state.scheduledCosts = schedule.costs;
 
     // Build notification message
     var msg = "Scheduled for " + formatTime(schedule.scheduledStartTime.hour,
@@ -899,6 +905,9 @@ function onUnplug() {
     state.retryCount = 0;
     state.scheduledStartTime = null;
     state.scheduledEndTime = null;
+    state.scheduledKwhNeeded = null;
+    state.scheduledHoursNeeded = null;
+    state.scheduledCosts = null;
 
     // Cancel any pending timers
     state.pendingTimers = [];
@@ -947,15 +956,28 @@ exports.status = function() {
     output += "  Manual override: " + (state.manualOverride ? "Yes" : "No") + "\n";
     output += "  Retry count: " + state.retryCount + "/3\n";
 
+    // Show stored schedule info (set on plug-in)
     if (state.scheduledStartTime !== null) {
         var startTime = minutesToTime(state.scheduledStartTime);
-        output += "  Scheduled start: " + formatTime(startTime.hour, startTime.minute) + "\n";
-    }
-
-    // Preview schedule if plugged in but not charging
-    if (plugged && !charging && soc < config.targetSOC) {
+        var endTime = minutesToTime(state.scheduledEndTime);
+        output += "\nScheduled Charge:\n";
+        output += "  Start: " + formatTime(startTime.hour, startTime.minute) + "\n";
+        output += "  Finish: " + formatTime(endTime.hour, endTime.minute) + "\n";
+        if (state.scheduledKwhNeeded !== null) {
+            output += "  Energy: " + state.scheduledKwhNeeded.toFixed(1) + " kWh\n";
+            output += "  Duration: " + state.scheduledHoursNeeded.toFixed(1) + " hours\n";
+        }
+        if (state.scheduledCosts !== null) {
+            output += "  Est. cost: £" + state.scheduledCosts.totalCost.toFixed(2) + "\n";
+            if (state.scheduledCosts.overspillHours > 0) {
+                output += "  WARNING: " + state.scheduledCosts.overspillHours.toFixed(1) +
+                      "h at standard rate (£" + state.scheduledCosts.overspillCost.toFixed(2) + ")\n";
+            }
+        }
+    } else if (plugged && !charging && soc < config.targetSOC) {
+        // No schedule stored yet - show preview (calculate now)
         var schedule = calculateSchedule(soc, config.targetSOC);
-        output += "\nSchedule Preview:\n";
+        output += "\nSchedule Preview (not yet scheduled):\n";
         output += "  Energy needed: " + schedule.kwhNeeded.toFixed(1) + " kWh\n";
         output += "  Duration: " + schedule.hoursNeeded.toFixed(1) + " hours\n";
         output += "  Start: " + formatTime(schedule.scheduledStartTime.hour,
@@ -1032,5 +1054,12 @@ if (!state.subscribed) {
 
 console.info("Config loaded - Target: " + config.targetSOC + "%, Ready by: " +
             formatTime(config.readyByHour, config.readyByMinute));
+
+// Check if already plugged in on boot (handles OVMS reboot while plugged in)
+if (isPluggedIn() && state.scheduledStartTime === null) {
+    console.info("Vehicle already plugged in on boot - calculating schedule");
+    onPlugIn();
+}
+
 console.info("Ready for operation");
 print(repeatString("=", 50) + "\n\n");
