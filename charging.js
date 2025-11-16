@@ -37,7 +37,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "3.1.1";
+var VERSION = "3.1.2";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -278,13 +278,13 @@ function getBatteryCapacity() {
 }
 
 function isPluggedIn() {
-    var pilot = getMetric("v.c.pilot", 0);
-    return pilot === true || pilot === 1 || pilot === "yes" || pilot === "true";
+    // AsFloat returns 0 or 1 for boolean metrics
+    return getMetric("v.c.pilot", 0) != 0;
 }
 
 function isCharging() {
-    var charging = getMetric("v.c.charging", 0);
-    return charging === true || charging === 1 || charging === "yes" || charging === "true";
+    // AsFloat returns 0 or 1 for boolean metrics
+    return getMetric("v.c.charging", 0) != 0;
 }
 
 function kmToMiles(km) {
