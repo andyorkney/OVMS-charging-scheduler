@@ -37,7 +37,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "3.1.0";
+var VERSION = "3.1.1";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -819,12 +819,12 @@ exports.start = function() {
 
     if (!plugged) {
         console.warn("Start failed: Not plugged in");
-        return false;
+        return "Error: Not plugged in";
     }
 
     if (soc >= config.targetSOC) {
         console.info("Start skipped: Already at target (" + soc.toFixed(0) + "%)");
-        return false;
+        return "Already at target (" + soc.toFixed(0) + "%)";
     }
 
     try {
@@ -836,10 +836,10 @@ exports.start = function() {
         OvmsCommand.Exec("charge start");
         notify("Manual charge started. Target " + config.targetSOC + "%.");
 
-        return true;
+        return "Charging started: " + soc.toFixed(0) + "% -> " + config.targetSOC + "%";
     } catch (e) {
         console.error("Start charging failed", e);
-        return false;
+        return "Error: " + e.message;
     }
 };
 
@@ -852,10 +852,10 @@ exports.stop = function() {
 
         OvmsCommand.Exec("charge stop");
         console.info("Charging stopped");
-        return true;
+        return "Charging stopped";
     } catch (e) {
         console.error("Stop charging failed", e);
-        return false;
+        return "Error: " + e.message;
     }
 };
 
@@ -882,19 +882,20 @@ function onUnplug() {
 // ============================================================================
 
 exports.status = function() {
-    print("\n");
-    print("OVMS Smart Charging v" + VERSION + "\n");
-    print(repeatString("=", 50) + "\n");
+    var output = "";
+
+    output += "\nOVMS Smart Charging v" + VERSION + "\n";
+    output += repeatString("=", 50) + "\n";
 
     // Configuration
-    print("Configuration:\n");
-    print("  Target SOC: " + config.targetSOC + "%\n");
-    print("  Ready by: " + formatTime(config.readyByHour, config.readyByMinute) + "\n");
-    print("  Cheap window: " + formatTime(config.cheapWindowStart.hour, config.cheapWindowStart.minute) +
-          " to " + formatTime(config.cheapWindowEnd.hour, config.cheapWindowEnd.minute) + "\n");
-    print("  Rates: £" + config.cheapRate.toFixed(3) + " cheap, £" +
-          config.standardRate.toFixed(3) + " standard\n");
-    print("  Charger: " + config.chargerRate.toFixed(1) + " kW\n");
+    output += "Configuration:\n";
+    output += "  Target SOC: " + config.targetSOC + "%\n";
+    output += "  Ready by: " + formatTime(config.readyByHour, config.readyByMinute) + "\n";
+    output += "  Cheap window: " + formatTime(config.cheapWindowStart.hour, config.cheapWindowStart.minute) +
+          " to " + formatTime(config.cheapWindowEnd.hour, config.cheapWindowEnd.minute) + "\n";
+    output += "  Rates: £" + config.cheapRate.toFixed(3) + " cheap, £" +
+          config.standardRate.toFixed(3) + " standard\n";
+    output += "  Charger: " + config.chargerRate.toFixed(1) + " kW\n";
 
     // Vehicle state
     var soc = getSOC();
@@ -904,44 +905,48 @@ exports.status = function() {
     var rangeKm = getMetric("v.b.range.est", 0);
     var effectiveCap = calculateEffectiveCapacity();
 
-    print("\nVehicle:\n");
-    print("  SOC: " + soc.toFixed(1) + "%\n");
-    print("  SOH: " + soh.toFixed(0) + "%\n");
-    print("  Effective capacity: " + effectiveCap.toFixed(1) + " kWh\n");
-    print("  Plugged in: " + (plugged ? "Yes" : "No") + "\n");
-    print("  Charging: " + (charging ? "Yes" : "No") + "\n");
-    print("  Est. range: " + kmToMiles(rangeKm).toFixed(0) + " miles\n");
+    output += "\nVehicle:\n";
+    output += "  SOC: " + soc.toFixed(1) + "%\n";
+    output += "  SOH: " + soh.toFixed(0) + "%\n";
+    output += "  Effective capacity: " + effectiveCap.toFixed(1) + " kWh\n";
+    output += "  Plugged in: " + (plugged ? "Yes" : "No") + "\n";
+    output += "  Charging: " + (charging ? "Yes" : "No") + "\n";
+    output += "  Est. range: " + kmToMiles(rangeKm).toFixed(0) + " miles\n";
 
     // State
-    print("\nState:\n");
-    print("  Monitoring: " + (state.monitoring ? "Yes" : "No") + "\n");
-    print("  Scheduled active: " + (state.scheduledChargeActive ? "Yes" : "No") + "\n");
-    print("  Manual override: " + (state.manualOverride ? "Yes" : "No") + "\n");
-    print("  Retry count: " + state.retryCount + "/3\n");
+    output += "\nState:\n";
+    output += "  Monitoring: " + (state.monitoring ? "Yes" : "No") + "\n";
+    output += "  Scheduled active: " + (state.scheduledChargeActive ? "Yes" : "No") + "\n";
+    output += "  Manual override: " + (state.manualOverride ? "Yes" : "No") + "\n";
+    output += "  Retry count: " + state.retryCount + "/3\n";
 
     if (state.scheduledStartTime !== null) {
         var startTime = minutesToTime(state.scheduledStartTime);
-        print("  Scheduled start: " + formatTime(startTime.hour, startTime.minute) + "\n");
+        output += "  Scheduled start: " + formatTime(startTime.hour, startTime.minute) + "\n";
     }
 
     // Preview schedule if plugged in but not charging
     if (plugged && !charging && soc < config.targetSOC) {
         var schedule = calculateSchedule(soc, config.targetSOC);
-        print("\nSchedule Preview:\n");
-        print("  Energy needed: " + schedule.kwhNeeded.toFixed(1) + " kWh\n");
-        print("  Duration: " + schedule.hoursNeeded.toFixed(1) + " hours\n");
-        print("  Start: " + formatTime(schedule.scheduledStartTime.hour,
-                                        schedule.scheduledStartTime.minute) + "\n");
-        print("  Finish: " + formatTime(schedule.scheduledEndTime.hour,
-                                         schedule.scheduledEndTime.minute) + "\n");
-        print("  Est. cost: £" + schedule.costs.totalCost.toFixed(2) + "\n");
+        output += "\nSchedule Preview:\n";
+        output += "  Energy needed: " + schedule.kwhNeeded.toFixed(1) + " kWh\n";
+        output += "  Duration: " + schedule.hoursNeeded.toFixed(1) + " hours\n";
+        output += "  Start: " + formatTime(schedule.scheduledStartTime.hour,
+                                        schedule.scheduledStartTime.minute) + "\n";
+        output += "  Finish: " + formatTime(schedule.scheduledEndTime.hour,
+                                         schedule.scheduledEndTime.minute) + "\n";
+        output += "  Est. cost: £" + schedule.costs.totalCost.toFixed(2) + "\n";
         if (schedule.costs.overspillHours > 0) {
-            print("  WARNING: " + schedule.costs.overspillHours.toFixed(1) +
-                  "h at standard rate (£" + schedule.costs.overspillCost.toFixed(2) + ")\n");
+            output += "  WARNING: " + schedule.costs.overspillHours.toFixed(1) +
+                  "h at standard rate (£" + schedule.costs.overspillCost.toFixed(2) + ")\n";
         }
     }
 
-    print("\n");
+    output += "\n";
+
+    // Print for console AND return for app
+    print(output);
+    return output;
 };
 
 // ============================================================================
@@ -949,19 +954,23 @@ exports.status = function() {
 // ============================================================================
 
 exports.debug = function() {
-    print("\nDEBUG - Internal State\n");
-    print(repeatString("=", 50) + "\n");
-    print("state.monitoring: " + state.monitoring + "\n");
-    print("state.subscribed: " + state.subscribed + "\n");
-    print("state.scheduledChargeActive: " + state.scheduledChargeActive + "\n");
-    print("state.manualOverride: " + state.manualOverride + "\n");
-    print("state.retryCount: " + state.retryCount + "\n");
-    print("state.pendingTimers: " + state.pendingTimers.length + "\n");
-    print("config.targetSOC: " + config.targetSOC + "\n");
-    print("Current SOC: " + getSOC().toFixed(1) + "%\n");
-    print("Charging: " + isCharging() + "\n");
-    print("Plugged: " + isPluggedIn() + "\n");
-    print("\n");
+    var output = "";
+    output += "\nDEBUG - Internal State\n";
+    output += repeatString("=", 50) + "\n";
+    output += "state.monitoring: " + state.monitoring + "\n";
+    output += "state.subscribed: " + state.subscribed + "\n";
+    output += "state.scheduledChargeActive: " + state.scheduledChargeActive + "\n";
+    output += "state.manualOverride: " + state.manualOverride + "\n";
+    output += "state.retryCount: " + state.retryCount + "\n";
+    output += "state.pendingTimers: " + state.pendingTimers.length + "\n";
+    output += "config.targetSOC: " + config.targetSOC + "\n";
+    output += "Current SOC: " + getSOC().toFixed(1) + "%\n";
+    output += "Charging: " + isCharging() + "\n";
+    output += "Plugged: " + isPluggedIn() + "\n";
+    output += "\n";
+
+    print(output);
+    return output;
 };
 
 // ============================================================================
