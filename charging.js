@@ -37,7 +37,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "3.2.3";
+var VERSION = "3.3.0";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -791,14 +791,25 @@ exports.checkSchedule = function() {
         if (state.scheduledStartTime !== null && !charging && plugged &&
             currentSOC < config.targetSOC) {
 
-            // Check if current time matches scheduled start (within 30 min window)
-            var diff = Math.abs(nowMin - state.scheduledStartTime);
-            if (diff > 720) {
-                diff = 1440 - diff; // Handle day wrap
+            // Calculate time difference handling day wrap
+            var diff = nowMin - state.scheduledStartTime;
+            if (diff < -720) {
+                diff += 1440; // Handle wrap (e.g., now=100, scheduled=1400)
+            } else if (diff > 720) {
+                diff -= 1440; // Handle wrap other direction
             }
 
-            if (diff <= 30) {
-                console.info("Schedule: Starting scheduled charge");
+            // Start if:
+            // - Current time is at or after scheduled time (diff >= 0)
+            // - Or within 30 minutes before scheduled time (diff >= -30)
+            // But not more than 6 hours after (diff <= 360) to avoid stale schedules
+            if (diff >= -30 && diff <= 360) {
+                console.info("Schedule: Starting charge (scheduled=" +
+                            formatTime(minutesToTime(state.scheduledStartTime).hour,
+                                       minutesToTime(state.scheduledStartTime).minute) +
+                            ", now=" + formatTime(minutesToTime(nowMin).hour,
+                                                  minutesToTime(nowMin).minute) +
+                            ", diff=" + diff + "min)");
 
                 try {
                     OvmsCommand.Exec("charge start");
