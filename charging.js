@@ -1,7 +1,7 @@
 /**
  * OVMS Smart Charging Scheduler
  *
- * VERSION: 3.1.0
+ * VERSION: 3.4.0
  * BUILD: Smart scheduling with ready-by time, SOH-aware calculations, cost estimates,
  *        and automatic charge interruption recovery with climate wake cycle
  *
@@ -37,7 +37,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "3.2.3";
+var VERSION = "3.4.0";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -791,14 +791,25 @@ exports.checkSchedule = function() {
         if (state.scheduledStartTime !== null && !charging && plugged &&
             currentSOC < config.targetSOC) {
 
-            // Check if current time matches scheduled start (within 30 min window)
-            var diff = Math.abs(nowMin - state.scheduledStartTime);
-            if (diff > 720) {
-                diff = 1440 - diff; // Handle day wrap
+            // Calculate time difference handling day wrap
+            var diff = nowMin - state.scheduledStartTime;
+            if (diff < -720) {
+                diff += 1440; // Handle wrap (e.g., now=100, scheduled=1400)
+            } else if (diff > 720) {
+                diff -= 1440; // Handle wrap other direction
             }
 
-            if (diff <= 30) {
-                console.info("Schedule: Starting scheduled charge");
+            // Start if:
+            // - Current time is at or after scheduled time (diff >= 0)
+            // - Or within 30 minutes before scheduled time (diff >= -30)
+            // But not more than 6 hours after (diff <= 360) to avoid stale schedules
+            if (diff >= -30 && diff <= 360) {
+                console.info("Schedule: Starting charge (scheduled=" +
+                            formatTime(minutesToTime(state.scheduledStartTime).hour,
+                                       minutesToTime(state.scheduledStartTime).minute) +
+                            ", now=" + formatTime(minutesToTime(nowMin).hour,
+                                                  minutesToTime(nowMin).minute) +
+                            ", diff=" + diff + "min)");
 
                 try {
                     OvmsCommand.Exec("charge start");
@@ -1088,6 +1099,9 @@ loadConfig();
 
 // Subscribe to events
 if (!state.subscribed) {
+    // Schedule checker - CRITICAL: This actually starts charging at scheduled time!
+    PubSub.subscribe("ticker.60", exports.checkSchedule);
+
     // SOC monitoring (every 60 seconds when charging)
     PubSub.subscribe("ticker.60", monitorSOC);
 
@@ -1099,7 +1113,7 @@ if (!state.subscribed) {
     PubSub.subscribe("vehicle.charge.pilot.off", onUnplug);
 
     state.subscribed = true;
-    console.info("Event subscriptions active");
+    console.info("Event subscriptions active (schedule checker enabled)");
 }
 
 console.info("Config loaded - Target: " + config.targetSOC + "%, Ready by: " +
