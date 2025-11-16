@@ -37,7 +37,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "3.2.1";
+var VERSION = "3.2.2";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -666,6 +666,12 @@ function monitorSOC() {
 // ============================================================================
 
 function onPlugIn() {
+    // Guard against double-firing (can happen if both events trigger)
+    if (state.scheduledStartTime !== null) {
+        console.info("onPlugIn: Schedule already set, ignoring duplicate event");
+        return;
+    }
+
     console.info("Vehicle plugged in - calculating schedule");
 
     var currentSOC = getSOC();
