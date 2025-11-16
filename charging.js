@@ -1,7 +1,7 @@
 /**
  * OVMS Smart Charging Scheduler
  *
- * VERSION: 3.5.0
+ * VERSION: 3.4.0
  * BUILD: Smart scheduling with ready-by time, SOH-aware calculations, cost estimates,
  *        and automatic charge interruption recovery with climate wake cycle
  *
@@ -37,7 +37,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "3.5.0";
+var VERSION = "3.4.0";
 
 if (typeof exports === 'undefined') {
     var exports = {};
@@ -332,63 +332,6 @@ function isPluggedIn() {
 function isCharging() {
     // AsFloat returns 0 or 1 for boolean metrics
     return getMetric("v.c.charging", 0) != 0;
-}
-
-function getChargeState() {
-    // Get charge state as string (e.g., "charging", "stopped", "timerwait")
-    try {
-        return OvmsMetrics.Value("v.c.state") || "";
-    } catch (e) {
-        return "";
-    }
-}
-
-function isTimerWait() {
-    // Check if vehicle's internal charge timer is blocking
-    var state = getChargeState();
-    return state === "timerwait";
-}
-
-function disableVehicleTimer() {
-    // Disable ENV200/Leaf internal charge timer
-    console.info("Disabling vehicle internal charge timer");
-    try {
-        OvmsCommand.Exec("config set xnl cctimer off");
-        console.info("Vehicle charge timer disabled");
-        return true;
-    } catch (e) {
-        console.error("Failed to disable vehicle timer", e);
-        return false;
-    }
-}
-
-function startChargingWithTimerCheck() {
-    // Check if vehicle timer is blocking and disable if needed
-    if (isTimerWait()) {
-        console.warn("Vehicle in timerwait state - disabling internal timer first");
-        notify("Disabling vehicle internal charge timer...");
-
-        if (!disableVehicleTimer()) {
-            notify("Failed to disable vehicle timer. Try manually: config set xnl cctimer off");
-            return false;
-        }
-
-        // Wait a moment for timer disable to take effect, then start
-        scheduleAfterDelay(function() {
-            try {
-                OvmsCommand.Exec("charge start");
-                console.info("Charge started after disabling timer");
-            } catch (e) {
-                console.error("Charge start after timer disable failed", e);
-            }
-        }, 2000);
-
-        return true; // Timer disable initiated
-    }
-
-    // No timer blocking, start directly
-    OvmsCommand.Exec("charge start");
-    return true;
 }
 
 function kmToMiles(km) {
@@ -706,7 +649,7 @@ function attemptChargeRestart() {
     // Perform climate wake cycle, then restart
     performClimateWake(function() {
         try {
-            startChargingWithTimerCheck();
+            OvmsCommand.Exec("charge start");
             notify("Charging restarted. Target " + config.targetSOC + "%.");
             // Reset retry count on successful restart
             // (will increment again if it fails immediately)
@@ -869,7 +812,7 @@ exports.checkSchedule = function() {
                             ", diff=" + diff + "min)");
 
                 try {
-                    startChargingWithTimerCheck();
+                    OvmsCommand.Exec("charge start");
                     notify("Charging started. Target " + config.targetSOC + "%.");
                     state.scheduledChargeActive = true;
                     state.monitoring = true;
@@ -984,7 +927,7 @@ exports.start = function() {
         state.monitoring = true;
         state.retryCount = 0;
 
-        startChargingWithTimerCheck();
+        OvmsCommand.Exec("charge start");
         notify("Manual charge started. Target " + config.targetSOC + "%.");
 
         return "Charging started: " + soc.toFixed(0) + "% -> " + config.targetSOC + "%";
