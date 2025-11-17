@@ -32,7 +32,7 @@
 // VERSION & MODULE INFO
 // ============================================================================
 
-var VERSION = "3.5.0";
+var VERSION = "3.5.1";
 
 if (typeof exports === "undefined") {
     var exports = {};
@@ -243,6 +243,16 @@ function getCurrentMinutes() {
     return d.getHours() * 60 + d.getMinutes();
 }
 
+// Normalize a time relative to a reference point (typically ready_by)
+// Times after the reference (on the 24-hour clock) are treated as "yesterday"
+// This creates a linear timeline for proper temporal comparison
+function normalizeToReference(timeMin, referenceMin) {
+    if (timeMin > referenceMin) {
+        return timeMin - 1440;  // Shift back by one day
+    }
+    return timeMin;
+}
+
 function isInCheapWindow(mins) {
     var startMin = timeToMinutes(config.cheapWindowStart.hour, config.cheapWindowStart.minute);
     var endMin = timeToMinutes(config.cheapWindowEnd.hour, config.cheapWindowEnd.minute);
@@ -285,24 +295,18 @@ function calculateSchedule(currentSOC, targetSOC) {
     var scheduledStartMin;
     var mustStartEarly = false;
 
-    // Check if we can wait for cheap window
-    // Compare relative to readyBy (handles day wrap)
-    var cheapStartRelative = cheapStartMin;
-    var latestStartRelative = latestStartMin;
+    // Normalize all times relative to readyBy to handle day-wrap correctly
+    // This ensures we're comparing times in the correct temporal order
+    var cheapStartNormalized = normalizeToReference(cheapStartMin, readyByMin);
+    var latestStartNormalized = normalizeToReference(latestStartMin, readyByMin);
 
-    // Normalize to readyBy reference
-    if (cheapStartMin > readyByMin) {
-        cheapStartRelative = cheapStartMin - 1440;
-    }
-    if (latestStartMin > readyByMin) {
-        latestStartRelative = latestStartMin - 1440;
-    }
-
-    if (latestStartRelative >= cheapStartRelative) {
+    // Now we can compare: if latest start comes after (or at same time as) cheap start,
+    // we can wait for the cheap window
+    if (latestStartNormalized >= cheapStartNormalized) {
         // Can wait for cheap window
         scheduledStartMin = cheapStartMin;
     } else {
-        // Must start before cheap window
+        // Must start before cheap window (latest start is earlier than cheap start)
         scheduledStartMin = latestStartMin;
         mustStartEarly = true;
     }
