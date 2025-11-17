@@ -232,7 +232,7 @@ total_cost = cheap_cost + overspill_cost
    → Calculate cheap/overspill hours and costs
 
 5. Stop auto-charge (ENV200 auto-starts when plugged in)
-   → Execute: "xnl charge stop"
+   → Execute: "charge stop"
 
 6. Send notification with schedule and cost estimate (with timestamp)
 
@@ -253,7 +253,7 @@ total_cost = cheap_cost + overspill_cost
      → EXIT
 
 3. Start charging
-   → Execute: "xnl charge start"
+   → Execute: "charge start"
    → Notify: "[HH:MM] Charging started. Target X%."
    → Set flag: scheduled_charge_active = TRUE
 
@@ -265,7 +265,7 @@ total_cost = cheap_cost + overspill_cost
 ```
 1. Read current SOC
    IF current_soc >= target_soc THEN
-     → Execute: "xnl charge stop"
+     → Execute: "charge stop"
      → Notify: "[HH:MM] Charged to X%"
      → Clear flag: scheduled_charge_active = FALSE
      → EXIT monitoring
@@ -306,7 +306,7 @@ IF charging stops unexpectedly during scheduled charge:
        → Wait 5 seconds
 
   8. Restart charging
-       → Execute: "xnl charge start"
+       → Execute: "charge start"
        → Notify: "[HH:MM] Charging restarted. Target X%."
 
   9. Continue SOC monitoring
@@ -323,7 +323,7 @@ NOTE: Manual override charges do NOT auto-retry (user is present to handle)
    → Cancel scheduled start timer
 
 2. Start charging immediately
-   → Execute: "xnl charge start"
+   → Execute: "charge start"
    → Notify: "[HH:MM] Manual charge started. Target X%."
 
 3. Begin SOC monitoring (every 30 seconds)
@@ -488,11 +488,11 @@ PubSub.subscribe("vehicle.charge.pilot.off", onUnplug)
 // Ticker for SOC monitoring while charging (30-second interval)
 ```
 
-### OVMS Commands for ENV200
+### OVMS Commands
 
 ```javascript
-OvmsCommand.Exec("xnl charge start")      // Start charging
-OvmsCommand.Exec("xnl charge stop")       // Stop charging
+OvmsCommand.Exec("charge start")          // Start charging
+OvmsCommand.Exec("charge stop")           // Stop charging
 OvmsCommand.Exec("climatecontrol on")     // Start climate (wake pilot)
 OvmsCommand.Exec("climatecontrol off")    // Stop climate
 ```
