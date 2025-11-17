@@ -5,6 +5,72 @@
 
 ---
 
+## Version 1.2 - 2025-11-17 (PASSIVE MONITORING FIX)
+
+**Status:** Implemented in v3.5.0
+
+### What Changed:
+
+**Critical Bug Fix: Removed Destructive Event Subscriptions**
+- REMOVED subscription to `vehicle.charge.start` event
+- This event was triggering `charge stop` on every charge attempt, causing start/stop loop
+- Replaced with passive ticker-based plug-in detection (polling `v.c.pilot` state)
+- Script now monitors plug state changes without interfering with charging
+
+**Documentation Fix: Removed Incorrect xnl Commands**
+- Changed `xnl charge start/stop` to generic `charge start/stop`
+- xnl prefix is Nissan-specific; generic commands work for all OVMS vehicles
+
+**Implementation Simplification**
+- Reduced from 1129 lines (broken v3.4.0) to 678 lines
+- Single ticker.60 subscription (like stable v2.0.7)
+- No custom timer system - simpler and more reliable
+- Uses legacy config keys matching existing OVMS config
+
+### Why:
+
+**Root Cause Identified:** The previous v3.x subscribed to `vehicle.charge.start` and immediately called `charge stop`. This meant every time charging began (manual or auto), our script stopped it - creating the "Timer On" start/stop loop.
+
+**User Impact:** Vehicle could not charge at all. Every charge attempt was immediately stopped.
+
+### Who Agreed:
+
+- User (andyorkney) - 2025-11-17
+- After extensive debugging of start/stop loop caused by event subscriptions
+
+### Impact:
+
+**Code Changes:**
+- Removed all PubSub.subscribe calls except ticker.60
+- Added `checkPlugInState()` to detect plug state changes via polling
+- Added `state.lastPluggedIn` to track state transitions
+- No auto-stop on plug-in (must be added separately with one-shot logic)
+- Uses `charge start/stop` (not `xnl charge start/stop`)
+
+**Testing Required:**
+- ✅ Verify script loads without errors
+- ✅ Verify manual `charge start` is not stopped by script
+- ✅ Verify plug-in detection works via ticker
+- ✅ Verify schedule calculation on plug-in
+- ✅ Verify scheduled charge starts at correct time
+- ✅ Verify target SOC monitoring stops charge at target
+
+**User-Visible Changes:**
+- Charging now works (no more start/stop loop)
+- Auto-stop on plug-in removed (will be re-added with one-shot logic)
+- Schedule calculated on plug-in detection (up to 60 second delay)
+
+**Missing Features (to be added):**
+- One-shot auto-stop on plug-in (ENV200 auto-starts)
+- Persistent schedule (survive reboots/power cuts)
+- Charge recovery after power cut
+
+### Rollback Plan:
+
+Revert to v2.0.7.3 if issues arise (working but lacks ready-by scheduling).
+
+---
+
 ## Version 1.1 - 2025-01-15 (CLIMATE WAKE RETRY)
 
 **Status:** Design updated - ready for implementation
@@ -165,13 +231,13 @@ None currently
 
 ## Known Issues
 
-### Issue #1: Event Detection Unknown (Testing Required)
+### Issue #1: Event Subscription Causes Charge Interference (RESOLVED)
 
-**Problem:** Don't yet know which event fires on ENV200 plug-in
-**Options:** `vehicle.charge.prepare` OR `vehicle.charge.start`
-**Status:** Needs testing with real vehicle
-**Impact:** May need to adjust event subscription in code
-**Workaround:** Currently subscribe to both events
+**Problem:** Subscribing to `vehicle.charge.start` and calling `charge stop` in handler causes start/stop loop
+**Root Cause:** `vehicle.charge.start` fires when charging begins (not on plug-in), so stopping charge there prevents all charging
+**Solution:** Use passive ticker-based polling instead of event subscriptions
+**Status:** FIXED in v3.5.0 (v1.2 design)
+**Impact:** Cannot use event subscriptions for plug-in detection; must poll state
 
 ### Issue #2: Climate Wake Timing Unknown (Testing Required)
 
