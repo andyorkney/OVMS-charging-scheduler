@@ -656,8 +656,9 @@ exports.status = function() {
 
 loadConfig();
 
-// Initialize plug state
-state.lastPluggedIn = isPluggedIn();
+// Initialize plug state to false - will detect on first ticker
+// This avoids OvmsMetrics calls during module load which can stall JS engine
+state.lastPluggedIn = false;
 
 // Subscribe to ticker for monitoring (passive approach)
 if (!state.subscribed) {
@@ -667,12 +668,6 @@ if (!state.subscribed) {
     });
     state.subscribed = true;
     print("Ticker monitoring active\n");
-}
-
-// Check if already plugged in on load
-if (state.lastPluggedIn && state.scheduledStartMin === null) {
-    print("Already plugged in - calculating schedule\n");
-    onPlugInDetected();
 }
 
 print("Ready\n");
