@@ -483,6 +483,15 @@ function checkSchedule() {
 }
 
 // ============================================================================
+// TICKER HANDLER (called by ticker.60)
+// ============================================================================
+
+function tickerHandler() {
+    checkSchedule();
+    monitorSOC();
+}
+
+// ============================================================================
 // SOC MONITORING (called by ticker.60)
 // ============================================================================
 
@@ -662,10 +671,7 @@ state.lastPluggedIn = false;
 
 // Subscribe to ticker for monitoring (passive approach)
 if (!state.subscribed) {
-    PubSub.subscribe("ticker.60", function() {
-        checkSchedule();
-        monitorSOC();
-    });
+    PubSub.subscribe("ticker.60", tickerHandler);
     state.subscribed = true;
     print("Ticker monitoring active\n");
 }
