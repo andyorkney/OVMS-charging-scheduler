@@ -497,17 +497,24 @@ function tickerHandler() {
 
 function monitorSOC() {
     try {
+        var charging = isCharging();
+        var soc = getSOC();
+
+        // Auto-enable monitoring when charging detected
+        if (charging && soc < config.targetSOC && !state.monitoring) {
+            state.monitoring = true;
+            print("Monitoring enabled (charge in progress)\n");
+        }
+
         if (!state.monitoring) {
             return;
         }
 
-        var charging = isCharging();
         if (!charging) {
             state.monitoring = false;
             return;
         }
 
-        var soc = getSOC();
         if (soc >= config.targetSOC) {
             notify("Target reached: " + soc.toFixed(0) + "%");
             stopCharging();
