@@ -310,6 +310,10 @@ When requirements conflict, this hierarchy determines which wins:
 |------|--------|---------------|--------|-------|
 | 2025-10-31 | User | 1 | ❌ FAIL | Charged to 98% instead of 80-90% |
 | 2025-10-31 | User | 2 | ✅ PASS | Started at 23:30 as expected |
+| 2025-11-17 | User | 2 | ✅ PASS | Schedule calculated correctly at 21:21 |
+| 2025-11-18 | User | 1 | ❌ FAIL | ENV200 has no stop command - cannot stop at target SOC |
+| 2025-11-18 | User | 7 | ❌ FAIL | Module crash after ~1 hour, required physical reboot |
+| 2025-11-18 | User | ALL | ❌ FAIL | v3.5.0 has catastrophic bugs - v0.1.0 rewrite required |
 |  |  |  |  |  |
 
 ---

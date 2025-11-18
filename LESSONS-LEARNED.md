@@ -78,6 +78,46 @@ OvmsCommand.Exec("xnl charge start");
 OvmsCommand.Exec("charge start");
 ```
 
+### 6. setInterval in DukTape (CRITICAL - ADDED 2025-11-18)
+**Symptom:** Module becomes unresponsive, requires physical reboot after several hours
+**Cause:** setInterval accumulates timers, memory leak in DukTape long-running tasks
+**Solution:** Use PubSub ticker events (OVMS-managed, stable)
+```javascript
+// BAD - causes module crash after hours
+state.monitoring_timer = setInterval(monitorSOC, 30000);
+
+// GOOD - OVMS-managed, stable
+var tickerSubscription = PubSub.subscribe("ticker.60", monitorSOC);
+// Later: PubSub.unsubscribe(tickerSubscription);
+```
+
+### 7. External Clock Event Files Calling Unexported Functions (ADDED 2025-11-18)
+**Symptom:** TypeError in logs, retry logic triggers, compounds other issues
+**Cause:** `/store/events/clock.HHMM/*.js` files call internal functions not in exports
+**Example:** `charging.checkSchedule()` when checkSchedule is internal only
+**Solution:** Either export the function OR remove dependency on external clock events
+```javascript
+// If using internal scheduling (ticker.60), do NOT rely on external clock events
+// User should delete /store/events/clock.*/charging-check.js files
+
+// If function needed externally, export it:
+exports.checkSchedule = checkSchedule;
+```
+
+### 8. ENV200 Charge Stop Command Limitation (ADDED 2025-11-18)
+**Symptom:** Vehicle charges to 98% instead of stopping at target (e.g., 80%)
+**Cause:** ENV200 vehicle does NOT support `xnl charge stop` command
+**Impact:** Cannot stop charging via OVMS commands
+**Workaround:** Must rely on vehicle's built-in charging limits or manual intervention
+```javascript
+// This command does NOT exist for ENV200:
+OvmsCommand.Exec("xnl charge stop");  // ❌ FAILS on ENV200
+
+// Generic command may or may not work depending on vehicle:
+OvmsCommand.Exec("charge stop");  // ⚠️ Test with your vehicle
+```
+**Note:** This is a vehicle firmware limitation, not an OVMS bug. Smart charging SOC-based stopping may not be possible on all vehicles.
+
 ---
 
 ## Config Key Naming
@@ -174,13 +214,33 @@ var currentSOC = OvmsMetrics.AsFloat("v.b.soc");  // MAY STALL
 - CAUSED START/STOP LOOP
 - "Timer On" prevented all charging
 
-### v3.5.0 - IN TESTING
+### v3.5.0 - BROKEN (CATASTROPHIC BUGS FOUND 2025-11-18)
 - 680 lines
-- Passive ticker-based monitoring (like v2.0.7)
-- No OvmsMetrics calls during init
-- Named function for ticker subscription
-- Stops at target SOC (not window end)
-- Missing: one-shot auto-stop, persistence
+- Passive ticker-based monitoring
+- Multiple timer systems conflicting
+- Event subscription to vehicle.charge.start caused start/stop loop
+- setInterval caused module crash after hours
+- External clock events calling unexported functions
+- No state management to prevent event confusion
+- **RESULT:** Module crash, required physical reboot
+
+### v3.5.1 - PARTIAL FIX (IN REPO, NOT DEPLOYED)
+- Fixed: No setInterval usage
+- Fixed: No vehicle.charge.start subscription
+- Still missing: Module wrapper, proper state management, shutdown function
+- Not fully tested
+- Need v0.1.0 clean rewrite
+
+### v0.1.0 - IN DEVELOPMENT (2025-11-18)
+- Complete architectural rewrite based on crash findings
+- IIFE module wrapper for proper scoping
+- Subscription tracking object for clean management
+- State flags (scheduled_charge_active, manual_override)
+- State guards to prevent event confusion
+- Init() and shutdown() for proper lifecycle
+- Ticker.60 only (no setInterval, no external events)
+- Robust error handling
+- **GOAL:** Stable, minimal, working foundation
 
 ---
 

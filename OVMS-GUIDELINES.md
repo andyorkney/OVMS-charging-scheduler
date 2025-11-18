@@ -218,6 +218,48 @@ print('Use: script eval "require(\'module\').function()"');
 
 ---
 
+## Vehicle-Specific Limitations
+
+### ENV200 Charge Stop Command
+
+**IMPORTANT:** The Nissan ENV200 does NOT support the `xnl charge stop` command.
+
+**Symptom:** Smart charging cannot stop charging at target SOC via OVMS commands.
+
+**Impact:**
+- Vehicle will charge to whatever limit is set in vehicle settings (often 98-100%)
+- SOC-based stopping in smart charging scripts will NOT work
+- Must rely on vehicle's built-in charging limits
+
+**Workaround Options:**
+1. Set vehicle's internal charge limit to match desired SOC (if vehicle supports it)
+2. Use time-based charging only (charge during cheap window, accept final SOC variation)
+3. Manual intervention to unplug or stop charging
+
+**Commands That Work:**
+- `charge start` or `xnl charge start` - ✅ Works
+- `charge status` - ✅ Works
+
+**Commands That DON'T Work on ENV200:**
+- `xnl charge stop` - ❌ Command doesn't exist
+- `charge stop` - ❌ May not work (vehicle-dependent)
+- `charge limit soc <value>` - ❌ Not supported
+
+**Detection in Code:**
+```javascript
+// Don't rely on charge stop working for all vehicles
+var stopSuccess = OvmsCommand.Exec("charge stop");
+// May return success but have no effect on ENV200
+```
+
+**Recommendation for Smart Charging Scripts:**
+- Focus on smart start timing (works reliably)
+- Make SOC-based stopping optional/best-effort
+- Notify users if stop commands fail
+- Document vehicle compatibility clearly
+
+---
+
 ## For AI Assistants / Claude Code
 
 **READ THIS FILE FIRST** before making any changes to:
